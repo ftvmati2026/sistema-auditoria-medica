@@ -1001,6 +1001,8 @@ function parseGlobalData(sede, mesStr, json) {
 let asesorSortCol = 'total';
 let asesorSortDir = -1; // -1 = desc, 1 = asc
 let asesorDataCache = [];
+let asesorSedeActual = 'San Juan'; // Sede actualmente seleccionada en el modal
+let asesorMesFiltro = 'GLOBAL';   // Mes actualmente seleccionado (GLOBAL = todos)
 
 function abrirModalAsesores() {
     const modal = document.getElementById('asesores-modal');
@@ -1011,15 +1013,27 @@ function abrirModalAsesores() {
     buscador.value = '';
     asesorSortCol = 'total';
     asesorSortDir = -1;
+    asesorMesFiltro = 'GLOBAL';
 
     // Detectar sede activa segun currentSheetId para pre-seleccionarla
     const sedeActual = sedesGlobales.find(s => s.id === currentSheetId);
     const nombreSedeDefault = sedeActual ? sedeActual.nombre : 'San Juan';
+    asesorSedeActual = nombreSedeDefault;
 
     // Configurar listeners de botones de sede
     document.querySelectorAll('.asesor-sede-btn').forEach(btn => {
         btn.onclick = () => {
-            cambiarSedeAsesores(btn.getAttribute('data-sede'));
+            asesorSedeActual = btn.getAttribute('data-sede');
+            cambiarSedeAsesores(asesorSedeActual, asesorMesFiltro);
+        };
+    });
+
+    // Configurar listeners de botones de mes
+    document.querySelectorAll('.asesor-mes-btn').forEach(btn => {
+        btn.onclick = () => {
+            asesorMesFiltro = btn.getAttribute('data-mes');
+            actualizarBotonesMes(asesorMesFiltro);
+            cambiarSedeAsesores(asesorSedeActual, asesorMesFiltro);
         };
     });
 
@@ -1042,11 +1056,35 @@ function abrirModalAsesores() {
         renderTablaAsesores(asesorDataCache, buscador.value.trim().toLowerCase());
     };
 
+    // Resetear seleccion visual de meses al GLOBAL
+    actualizarBotonesMes('GLOBAL');
+
     // Cargar con la sede activa por defecto
-    cambiarSedeAsesores(nombreSedeDefault);
+    cambiarSedeAsesores(nombreSedeDefault, 'GLOBAL');
 }
 
-function cambiarSedeAsesores(nombreSede) {
+function actualizarBotonesMes(mesSeleccionado) {
+    document.querySelectorAll('.asesor-mes-btn').forEach(btn => {
+        const esMes = btn.getAttribute('data-mes') === mesSeleccionado;
+        if (esMes) {
+            btn.style.background = 'rgba(56,189,248,0.25)';
+            btn.style.color = '#38bdf8';
+            btn.style.border = '1px solid rgba(56,189,248,0.6)';
+            btn.style.fontWeight = '800';
+        } else {
+            btn.style.background = 'transparent';
+            btn.style.color = 'var(--text-muted)';
+            btn.style.border = '1px solid var(--border-color)';
+            btn.style.fontWeight = '600';
+        }
+    });
+}
+
+function cambiarSedeAsesores(nombreSede, mesFiltro) {
+    if (mesFiltro === undefined) mesFiltro = asesorMesFiltro;
+    asesorSedeActual = nombreSede;
+    asesorMesFiltro = mesFiltro;
+
     const buscador = document.getElementById('buscador-asesor');
     const subtitulo = document.getElementById('asesores-subtitulo');
     const loadingHint = document.getElementById('asesores-loading-hint');
@@ -1055,10 +1093,10 @@ function cambiarSedeAsesores(nombreSede) {
     const coloresSede = {
         'San Juan':           { bg: 'rgba(139,92,246,0.2)',  color: '#a78bfa', border: 'rgba(139,92,246,0.6)' },
         'Salta':              { bg: 'rgba(56,189,248,0.2)',  color: '#38bdf8', border: 'rgba(56,189,248,0.6)' },
-        'Protecci\u00f3n Emerald': { bg: 'rgba(16,185,129,0.2)', color: '#10b981', border: 'rgba(16,185,129,0.6)' }
+        'Protección Emerald': { bg: 'rgba(16,185,129,0.2)', color: '#10b981', border: 'rgba(16,185,129,0.6)' }
     };
 
-    // Actualizar estilo visual de los botones
+    // Actualizar estilo visual de los botones de sede
     document.querySelectorAll('.asesor-sede-btn').forEach(btn => {
         const esActivo = btn.getAttribute('data-sede') === nombreSede;
         if (esActivo) {
@@ -1082,8 +1120,11 @@ function cambiarSedeAsesores(nombreSede) {
         loadingHint.style.display = 'none';
     }
 
-    // Filtrar globalData por sede seleccionada
-    const datosSede = globalData.filter(d => d.sedeNombre === nombreSede);
+    // Filtrar globalData por sede (y por mes si no es GLOBAL)
+    let datosSede = globalData.filter(d => d.sedeNombre === nombreSede);
+    if (mesFiltro !== 'GLOBAL') {
+        datosSede = datosSede.filter(d => d.mes === mesFiltro);
+    }
 
     // Agrupar por asesor
     const mapaAsesores = {};
@@ -1104,14 +1145,11 @@ function cambiarSedeAsesores(nombreSede) {
 
     asesorDataCache = Object.values(mapaAsesores);
 
-    // Subtitulo con info de la sede
-    const mesesDisp = [...new Set(datosSede.map(d => d.mes))];
-    const mesesStr = mesesDisp.length > 0
-        ? mesesDisp.map(m => m.charAt(0) + m.slice(1).toLowerCase()).join(', ')
-        : '—';
+    // Subtitulo con info detallada
+    const labelMes = mesFiltro === 'GLOBAL' ? 'Todos los meses' : (mesFiltro.charAt(0) + mesFiltro.slice(1).toLowerCase());
     subtitulo.innerText = datosSede.length > 0
-        ? nombreSede + ' \u00b7 ' + datosSede.length + ' registros \u00b7 Meses con datos: ' + mesesStr
-        : nombreSede + ' \u00b7 Sin datos disponibles a\u00fan (cargando...)';
+        ? `${nombreSede} · ${labelMes} · ${datosSede.length} registros`
+        : `${nombreSede} · ${labelMes} · Sin datos disponibles aún (cargando...)`;
 
     // Reset buscador y renderizar
     buscador.value = '';

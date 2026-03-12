@@ -670,6 +670,26 @@ body.light-theme .flap-sep {
     color: var(--text-main);
 }
 
+.asesor-mes-btn {
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    white-space: nowrap;
+}
+
+.asesor-mes-btn:hover {
+    background: rgba(56,189,248,0.08);
+    color: var(--text-main);
+    border-color: rgba(56,189,248,0.3);
+}
+
 .asesor-th {
     background-color: rgba(0, 0, 0, 0.25);
     color: var(--text-muted);
