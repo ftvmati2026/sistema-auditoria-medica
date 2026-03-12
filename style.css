@@ -674,20 +674,25 @@ body.light-theme .flap-sep {
     background: transparent;
     color: var(--text-muted);
     border: 1px solid var(--border-color);
-    padding: 5px 12px;
+    padding: 7px 14px;
     border-radius: 20px;
-    font-size: 0.78rem;
-    font-weight: 600;
+    font-size: 0.83rem;
+    font-weight: 700;
     cursor: pointer;
     transition: all 0.2s ease;
     font-family: inherit;
     white-space: nowrap;
 }
 
-.asesor-mes-btn:hover {
-    background: rgba(56,189,248,0.08);
+.asesor-mes-btn:hover:not(:disabled) {
+    background: rgba(255,255,255,0.05);
     color: var(--text-main);
-    border-color: rgba(56,189,248,0.3);
+}
+
+.asesor-mes-btn:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .asesor-th {

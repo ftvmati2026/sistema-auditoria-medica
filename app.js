@@ -1031,8 +1031,8 @@ function abrirModalAsesores() {
     // Configurar listeners de botones de mes
     document.querySelectorAll('.asesor-mes-btn').forEach(btn => {
         btn.onclick = () => {
+            if (btn.disabled) return; // Ignorar clicks en meses deshabilitados
             asesorMesFiltro = btn.getAttribute('data-mes');
-            actualizarBotonesMes(asesorMesFiltro);
             cambiarSedeAsesores(asesorSedeActual, asesorMesFiltro);
         };
     });
@@ -1063,20 +1063,49 @@ function abrirModalAsesores() {
     cambiarSedeAsesores(nombreSedeDefault, 'GLOBAL');
 }
 
-function actualizarBotonesMes(mesSeleccionado) {
+function actualizarBotonesMes(mesSeleccionado, colorActivo) {
+    // colorActivo = { bg, color, border } según la sede seleccionada
+    const cActivo = colorActivo || { bg: 'rgba(56,189,248,0.2)', color: '#38bdf8', border: 'rgba(56,189,248,0.6)' };
+
     document.querySelectorAll('.asesor-mes-btn').forEach(btn => {
-        const esMes = btn.getAttribute('data-mes') === mesSeleccionado;
-        if (esMes) {
-            btn.style.background = 'rgba(56,189,248,0.25)';
-            btn.style.color = '#38bdf8';
-            btn.style.border = '1px solid rgba(56,189,248,0.6)';
+        if (btn.disabled) return; // No tocar botones deshabilitados
+        const esActivo = btn.getAttribute('data-mes') === mesSeleccionado;
+        if (esActivo) {
+            btn.style.background = cActivo.bg;
+            btn.style.color = cActivo.color;
+            btn.style.border = '1px solid ' + cActivo.border;
             btn.style.fontWeight = '800';
         } else {
             btn.style.background = 'transparent';
             btn.style.color = 'var(--text-muted)';
             btn.style.border = '1px solid var(--border-color)';
-            btn.style.fontWeight = '600';
+            btn.style.fontWeight = '700';
         }
+    });
+}
+
+function habilitarBotonesMes(mesesConDatos) {
+    // Habilita/deshabilita botones de mes según:
+    // 1. Si el mes ya pasó o es el actual → habilitado siempre
+    // 2. Si es futuro Y no tiene datos → deshabilitado
+    const MESES_ORDEN = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                         'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+    const mesActualIndex = new Date().getMonth(); // 0-indexed: Ene=0, Mar=2, etc.
+
+    document.querySelectorAll('.asesor-mes-btn').forEach(btn => {
+        const dataMes = btn.getAttribute('data-mes');
+        if (dataMes === 'GLOBAL') {
+            btn.disabled = false;
+            btn.style.opacity = '';
+            btn.style.pointerEvents = '';
+            return;
+        }
+        const idx = MESES_ORDEN.indexOf(dataMes);
+        // Habilitado si: índice <= mes actual (ya pasó o es el corriente) O tiene datos
+        const habilitado = idx <= mesActualIndex || mesesConDatos.has(dataMes);
+        btn.disabled = !habilitado;
+        btn.style.opacity = habilitado ? '' : '0.25';
+        btn.style.pointerEvents = habilitado ? '' : 'none';
     });
 }
 
@@ -1089,46 +1118,53 @@ function cambiarSedeAsesores(nombreSede, mesFiltro) {
     const subtitulo = document.getElementById('asesores-subtitulo');
     const loadingHint = document.getElementById('asesores-loading-hint');
 
-    // Colores por sede
+    // Colores por sede (usados tanto para sede activa como para mes activo)
     const coloresSede = {
         'San Juan':           { bg: 'rgba(139,92,246,0.2)',  color: '#a78bfa', border: 'rgba(139,92,246,0.6)' },
         'Salta':              { bg: 'rgba(56,189,248,0.2)',  color: '#38bdf8', border: 'rgba(56,189,248,0.6)' },
         'Protección Emerald': { bg: 'rgba(16,185,129,0.2)', color: '#10b981', border: 'rgba(16,185,129,0.6)' }
     };
+    const colorSede = coloresSede[nombreSede] || coloresSede['San Juan'];
 
-    // Actualizar estilo visual de los botones de sede
+    // --- Actualizar estilo visual de botones de SEDE ---
     document.querySelectorAll('.asesor-sede-btn').forEach(btn => {
         const esActivo = btn.getAttribute('data-sede') === nombreSede;
         if (esActivo) {
-            const c = coloresSede[nombreSede] || { bg: 'rgba(56,189,248,0.2)', color: '#38bdf8', border: 'rgba(56,189,248,0.6)' };
-            btn.style.background = c.bg;
-            btn.style.color = c.color;
-            btn.style.border = '1px solid ' + c.border;
-            btn.style.fontWeight = '800';
+            btn.style.background  = colorSede.bg;
+            btn.style.color       = colorSede.color;
+            btn.style.border      = '1px solid ' + colorSede.border;
+            btn.style.fontWeight  = '800';
         } else {
-            btn.style.background = 'transparent';
-            btn.style.color = 'var(--text-muted)';
-            btn.style.border = '1px solid var(--border-color)';
-            btn.style.fontWeight = '700';
+            btn.style.background  = 'transparent';
+            btn.style.color       = 'var(--text-muted)';
+            btn.style.border      = '1px solid var(--border-color)';
+            btn.style.fontWeight  = '700';
         }
     });
 
-    // Si globalData aun carga, mostrar aviso
-    if (isLoadingGlobalData) {
-        loadingHint.style.display = 'flex';
-    } else {
-        loadingHint.style.display = 'none';
-    }
+    // --- Indicador de carga ---
+    loadingHint.style.display = isLoadingGlobalData ? 'flex' : 'none';
 
-    // Filtrar globalData por sede (y por mes si no es GLOBAL)
-    let datosSede = globalData.filter(d => d.sedeNombre === nombreSede);
-    if (mesFiltro !== 'GLOBAL') {
-        datosSede = datosSede.filter(d => d.mes === mesFiltro);
-    }
+    // --- Obtener TODOS los datos de la sede (sin filtro de mes) ---
+    const todosDatosSede = globalData.filter(d => d.sedeNombre === nombreSede);
 
-    // Agrupar por asesor
+    // --- Determinar qué meses tienen datos en esta sede ---
+    const mesesConDatos = new Set(todosDatosSede.map(d => d.mes));
+
+    // --- Habilitar/deshabilitar botones de mes según datos y fecha actual ---
+    habilitarBotonesMes(mesesConDatos);
+
+    // --- Resaltar el mes activo (con el color de la sede) ---
+    actualizarBotonesMes(mesFiltro, colorSede);
+
+    // --- Aplicar filtro de mes si no es GLOBAL ---
+    const datosFiltrados = mesFiltro === 'GLOBAL'
+        ? todosDatosSede
+        : todosDatosSede.filter(d => d.mes === mesFiltro);
+
+    // --- Agrupar por asesor ---
     const mapaAsesores = {};
-    datosSede.forEach(d => {
+    datosFiltrados.forEach(d => {
         const nombre = d.asesor.trim();
         if (!nombre) return;
         if (!mapaAsesores[nombre]) {
@@ -1137,24 +1173,27 @@ function cambiarSedeAsesores(nombreSede, mesFiltro) {
         const s = mapaAsesores[nombre];
         if (d.categoria.includes('ACEPTADA'))       { s.aceptadas++; s.total++; }
         else if (d.categoria.includes('RECHAZADA')) { s.rechazadas++; s.total++; }
-        else if (d.categoria.includes('CUOTA'))     { s.cuotas++; s.total++; }
+        else if (d.categoria.includes('CUOTA'))     { s.cuotas++;    s.total++; }
         else if (d.categoria.includes('DEVUELTA'))  { s.devueltas++; s.total++; }
-        else if (d.categoria.includes('PENDIENTE')) { s.pendientes++; s.total++; }
-        else { s.total++; }
+        else if (d.categoria.includes('PENDIENTE')) { s.pendientes++;s.total++; }
+        else                                        { s.total++;               }
     });
 
     asesorDataCache = Object.values(mapaAsesores);
 
-    // Subtitulo con info detallada
-    const labelMes = mesFiltro === 'GLOBAL' ? 'Todos los meses' : (mesFiltro.charAt(0) + mesFiltro.slice(1).toLowerCase());
-    subtitulo.innerText = datosSede.length > 0
-        ? `${nombreSede} · ${labelMes} · ${datosSede.length} registros`
-        : `${nombreSede} · ${labelMes} · Sin datos disponibles aún (cargando...)`;
+    // --- Subtítulo informativo ---
+    const labelMes = mesFiltro === 'GLOBAL'
+        ? 'Todos los meses'
+        : mesFiltro.charAt(0) + mesFiltro.slice(1).toLowerCase();
+    subtitulo.innerText = datosFiltrados.length > 0
+        ? `${nombreSede}  ·  ${labelMes}  ·  ${datosFiltrados.length} registros`
+        : `${nombreSede}  ·  ${labelMes}  ·  Sin datos (cargando o mes sin información)`;
 
-    // Reset buscador y renderizar
+    // --- Renderizar tabla ---
     buscador.value = '';
     renderTablaAsesores(asesorDataCache, '');
 }
+
 
 function renderTablaAsesores(data, filtro) {
     const tbody = document.getElementById('asesores-body');
