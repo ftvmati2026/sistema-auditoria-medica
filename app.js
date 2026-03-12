@@ -1037,6 +1037,11 @@ function abrirModalAsesores() {
         };
     });
 
+    // Listener del buscador
+    buscador.oninput = () => {
+        renderTablaAsesores(asesorDataCache, buscador.value.trim().toLowerCase(), asesorMesFiltro);
+    };
+
     // Listeners de ordenamiento en encabezados
     document.querySelectorAll('#asesores-table th.sortable').forEach(th => {
         th.onclick = () => {
@@ -1047,14 +1052,9 @@ function abrirModalAsesores() {
                 asesorSortCol = col;
                 asesorSortDir = -1;
             }
-            renderTablaAsesores(asesorDataCache, buscador.value.trim().toLowerCase());
+            renderTablaAsesores(asesorDataCache, buscador.value.trim().toLowerCase(), asesorMesFiltro);
         };
     });
-
-    // Listener del buscador
-    buscador.oninput = () => {
-        renderTablaAsesores(asesorDataCache, buscador.value.trim().toLowerCase());
-    };
 
     // Resetear seleccion visual de meses al GLOBAL
     actualizarBotonesMes('GLOBAL');
@@ -1191,11 +1191,12 @@ function cambiarSedeAsesores(nombreSede, mesFiltro) {
 
     // --- Renderizar tabla ---
     buscador.value = '';
-    renderTablaAsesores(asesorDataCache, '');
+    renderTablaAsesores(asesorDataCache, '', mesFiltro);
 }
 
 
-function renderTablaAsesores(data, filtro) {
+function renderTablaAsesores(data, filtro, mesFiltro) {
+    mesFiltro = mesFiltro || asesorMesFiltro;
     const tbody = document.getElementById('asesores-body');
     const footer = document.getElementById('asesores-footer');
 
@@ -1229,7 +1230,35 @@ function renderTablaAsesores(data, filtro) {
     tbody.innerHTML = '';
 
     if (lista.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="empty-state">No se encontró ningún asesor con ese nombre.</td></tr>`;
+        // Generar mensaje contextual según el caso
+        let mensajeVacio = '';
+        const MESES_NOMBRES = {
+            'ENERO':'Enero','FEBRERO':'Febrero','MARZO':'Marzo','ABRIL':'Abril',
+            'MAYO':'Mayo','JUNIO':'Junio','JULIO':'Julio','AGOSTO':'Agosto',
+            'SEPTIEMBRE':'Septiembre','OCTUBRE':'Octubre','NOVIEMBRE':'Noviembre','DICIEMBRE':'Diciembre'
+        };
+        const MESES_ORDEN = ['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO',
+                             'JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+        const mesActualIdx = new Date().getMonth(); // 0=Ene, 2=Mar, etc.
+
+        if (mesFiltro && mesFiltro !== 'GLOBAL') {
+            const idx = MESES_ORDEN.indexOf(mesFiltro);
+            if (idx > mesActualIdx) {
+                // Mes futuro
+                const nombreMes = MESES_NOMBRES[mesFiltro] || mesFiltro;
+                mensajeVacio = `🗓️ Todavía no estamos en ${nombreMes}, por eso no existe información aún.`;
+            } else if (filtro) {
+                mensajeVacio = `🔍 No se encontró ningún asesor con "${filtro}" en ${MESES_NOMBRES[mesFiltro] || mesFiltro}.`;
+            } else {
+                mensajeVacio = `⚠️ Sin registros para ${MESES_NOMBRES[mesFiltro] || mesFiltro} en esta sede.`;
+            }
+        } else if (filtro) {
+            mensajeVacio = `🔍 No se encontró ningún asesor con "${filtro}".`;
+        } else {
+            mensajeVacio = `⚠️ Sin datos disponibles para esta sede (cargando...)`;
+        }
+
+        tbody.innerHTML = `<tr><td colspan="8" class="empty-state" style="padding: 2.5rem; font-size: 0.95rem;">${mensajeVacio}</td></tr>`;
         footer.innerHTML = '';
         return;
     }
