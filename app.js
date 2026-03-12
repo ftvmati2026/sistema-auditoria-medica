@@ -346,11 +346,6 @@ function processSelectedMonth() {
             return 0;
         };
 
-        // Sumar columna K en TODAS las filas (independientemente de si es fila de cliente o fecha)
-        if (rowData.length > desreguladaColIndex) {
-            totalDesreguladas += getNumVal(desreguladaColIndex);
-        }
-
         if (rowData.length < 4) continue;
 
         const col1 = getVal(1); // ASESOR
@@ -360,6 +355,19 @@ function processSelectedMonth() {
         // Ignorar encabezados
         if (col1.toUpperCase() === 'ASESOR' || col3.toUpperCase().includes('CLIENTE/FECHA')) {
             continue;
+        }
+
+        // Contar desreguladas: cualquier celda no vacía en la columna (puede ser "SI", "X", "1", etc.)
+        // Solo para filas de clientes válidos (no filas de fecha ni encabezado)
+        if (col1 !== '' && col3 !== '') {
+            if (rowData.length > desreguladaColIndex) {
+                const desrVal = getVal(desreguladaColIndex);
+                if (desrVal !== '') {
+                    // Si es numérico, sumamos el valor; si es texto (SI, X, DESREGULADA, etc.), contamos como 1
+                    const numericVal = parseFloat(desrVal);
+                    totalDesreguladas += isNaN(numericVal) ? 1 : numericVal;
+                }
+            }
         }
 
         // Fila que es solo fecha
