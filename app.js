@@ -357,16 +357,14 @@ function processSelectedMonth() {
             continue;
         }
 
-        // Contar desreguladas: cualquier celda no vacía en la columna (puede ser "SI", "X", "1", etc.)
-        // Solo para filas de clientes válidos (no filas de fecha ni encabezado)
-        if (col1 !== '' && col3 !== '') {
-            if (rowData.length > desreguladaColIndex) {
-                const desrVal = getVal(desreguladaColIndex);
-                if (desrVal !== '') {
-                    // Si es numérico, sumamos el valor; si es texto (SI, X, DESREGULADA, etc.), contamos como 1
-                    const numericVal = parseFloat(desrVal);
-                    totalDesreguladas += isNaN(numericVal) ? 1 : numericVal;
-                }
+        // Contar desreguladas independientemente de si la fila tiene Asesor o Cliente,
+        // ya que a veces el total manual se coloca en filas vacías o de sólo fecha.
+        if (rowData.length > desreguladaColIndex) {
+            const desrVal = getVal(desreguladaColIndex);
+            if (desrVal !== '' && desrVal.toUpperCase() !== 'DESREGULADAS') {
+                // Si es numérico, sumamos el valor; si es texto (SI, X, etc.), contamos como 1
+                const numericVal = parseFloat(desrVal);
+                totalDesreguladas += isNaN(numericVal) ? 1 : numericVal;
             }
         }
 
