@@ -177,6 +177,7 @@
         <!-- Botones de Filtro por Estado -->
         <div class="status-filters" id="status-filters" style="display: flex; gap: 8px; flex-wrap: wrap;">
           <button class="filter-btn active" data-filter="TODOS">TODOS</button>
+          <button class="filter-btn filter-btn-desregulada" data-filter="DESREGULADA">DESREGULADAS</button>
           <button class="filter-btn" data-filter="ACEPTADA">ACEPTADAS</button>
           <button class="filter-btn" data-filter="RECHAZADA">RECHAZADAS</button>
           <button class="filter-btn" data-filter="CUOTA">CUOTA</button>
@@ -239,7 +240,7 @@
   <div id="asesores-modal"
     style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.75); backdrop-filter: blur(5px); z-index: 200; justify-content: center; align-items: center;">
     <div
-      style="background: var(--panel-bg); color: var(--text-main); width: 97%; max-width: 1350px; border-radius: 14px; border: 1px solid var(--border-color); display: flex; flex-direction: column; max-height: 95vh; padding: 2rem; gap: 1.2rem;">
+      style="background: var(--panel-bg); color: var(--text-main); width: 95%; max-width: 1100px; border-radius: 14px; border: 1px solid var(--border-color); display: flex; flex-direction: column; max-height: 88vh; padding: 2rem; gap: 1.2rem;">
 
       <!-- Header -->
       <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -276,26 +277,6 @@
         </div>
       </div>
 
-      <!-- Selector de Mes -->
-      <div id="asesor-mes-row" style="display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 14px; background: rgba(0,0,0,0.15); border-radius: 10px; border: 1px solid var(--border-color); align-items: center;">
-        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; gap: 5px; margin-right: 4px; text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;">
-          <span class="material-symbols-outlined" style="font-size:16px;">calendar_month</span> Mes:
-        </span>
-        <button class="asesor-mes-btn active" data-mes="GLOBAL" id="asesor-mes-GLOBAL">🌐 Global</button>
-        <button class="asesor-mes-btn" data-mes="ENERO" id="asesor-mes-ENERO">Enero</button>
-        <button class="asesor-mes-btn" data-mes="FEBRERO" id="asesor-mes-FEBRERO">Febrero</button>
-        <button class="asesor-mes-btn" data-mes="MARZO" id="asesor-mes-MARZO">Marzo</button>
-        <button class="asesor-mes-btn" data-mes="ABRIL" id="asesor-mes-ABRIL">Abril</button>
-        <button class="asesor-mes-btn" data-mes="MAYO" id="asesor-mes-MAYO">Mayo</button>
-        <button class="asesor-mes-btn" data-mes="JUNIO" id="asesor-mes-JUNIO">Junio</button>
-        <button class="asesor-mes-btn" data-mes="JULIO" id="asesor-mes-JULIO">Julio</button>
-        <button class="asesor-mes-btn" data-mes="AGOSTO" id="asesor-mes-AGOSTO">Agosto</button>
-        <button class="asesor-mes-btn" data-mes="SEPTIEMBRE" id="asesor-mes-SEPTIEMBRE">Sept.</button>
-        <button class="asesor-mes-btn" data-mes="OCTUBRE" id="asesor-mes-OCTUBRE">Octubre</button>
-        <button class="asesor-mes-btn" data-mes="NOVIEMBRE" id="asesor-mes-NOVIEMBRE">Nov.</button>
-        <button class="asesor-mes-btn" data-mes="DICIEMBRE" id="asesor-mes-DICIEMBRE">Dic.</button>
-      </div>
-
       <!-- Buscador de asesor -->
       <div style="position: relative;">
         <span class="material-symbols-outlined"
@@ -306,9 +287,9 @@
       </div>
 
       <!-- Tabla de asesores -->
-      <div style="overflow-y: auto; flex: 1; min-height: 0;">
+      <div style="overflow-y: auto; flex: 1;">
         <table style="width: 100%; border-collapse: collapse;" id="asesores-table">
-          <thead style="position: sticky; top: 0; z-index: 2;">
+          <thead>
             <tr>
               <th class="asesor-th sortable" data-col="nombre" style="text-align:left; cursor:pointer; user-select:none;">Asesor <span class="sort-icon">&#8597;</span></th>
               <th class="asesor-th sortable" data-col="total" style="cursor:pointer; user-select:none;">Total <span class="sort-icon">&#8597;</span></th>
