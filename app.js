@@ -311,7 +311,8 @@ function processSelectedMonth() {
     // Columna K es el índice 10 (A=0, B=1, ... K=10)
     // Pero la API de Google Sheets puede devolver menos columnas si las últimas están vacías.
     // Buscamos por encabezado 'DESREGUL' primero; si no lo encontramos, usamos el índice 10.
-    let desreguladaColIndex = 10; // Columna K por defecto (0-indexed)
+    let desreguladaColIndex = 10; // Columna K por defecto
+    let auditColIndex = -1;       // Para fecha de procesamiento
     if (json.table.cols) {
         for (let c = 0; c < json.table.cols.length; c++) {
             const label = json.table.cols[c] && json.table.cols[c].label
@@ -319,9 +320,16 @@ function processSelectedMonth() {
                 : '';
             if (label.includes('DESREGUL')) {
                 desreguladaColIndex = c;
-                break;
+            }
+            if (label.includes('FECHA AUD') || label.includes('PROCESO') || label.includes('AUDITORIA')) {
+                auditColIndex = c;
             }
         }
+    }
+    // Fallback: Si no se encuentra por nombre pero la hoja tiene suficientes columnas, 
+    // forzamos revisión de la columna L (índice 11)
+    if (auditColIndex === -1) {
+        auditColIndex = 11; 
     }
 
     let currentDate = "Sin fecha";
@@ -332,8 +340,14 @@ function processSelectedMonth() {
         if (!rowData) continue;
 
         const getVal = (colIndex) => {
-            if (rowData[colIndex] && rowData[colIndex].v !== null && rowData[colIndex].v !== undefined) {
-                return String(rowData[colIndex].v).trim();
+            if (rowData[colIndex]) {
+                // Priorizar valor formateado (.f) sobre el crudo (.v) para evitar errores con fechas de Google
+                if (rowData[colIndex].f !== null && rowData[colIndex].f !== undefined) {
+                    return String(rowData[colIndex].f).trim();
+                }
+                if (rowData[colIndex].v !== null && rowData[colIndex].v !== undefined) {
+                    return String(rowData[colIndex].v).trim();
+                }
             }
             return '';
         };
@@ -379,8 +393,31 @@ function processSelectedMonth() {
             const estado_auditor = getVal(7);
             const auditor = getVal(8);
 
+            // 1. Prioridad: Columna específica de Auditoría (si el usuario agrega una)
+            let fechaAudit = auditColIndex !== -1 ? getVal(auditColIndex) : "";
+
+            // 2. Fallback: Intentar extraer de comentarios si la columna está vacía
+            if (!fechaAudit) {
+                const dateRegex = /(\d{1,2})[\/-](\d{1,2})/;
+                const matchEstado = estado_auditor.match(dateRegex);
+                if (matchEstado) {
+                    fechaAudit = `${matchEstado[1].padStart(2, '0')}/${matchEstado[2].padStart(2, '0')}/2026`;
+                } else {
+                    const matchObs = observacion.match(dateRegex);
+                    if (matchObs) {
+                        fechaAudit = `${matchObs[1].padStart(2, '0')}/${matchObs[2].padStart(2, '0')}/2026`;
+                    }
+                }
+            }
+
+            // 3. Destino final: Si sigue vacío, usa la fecha de la ficha
+            if (!fechaAudit) {
+                fechaAudit = currentDate;
+            }
+
             allData.push({
                 fecha: currentDate,
+                fechaAudit: fechaAudit,
                 asesor: col1.toUpperCase(),
                 cliente: col3.toUpperCase(),
                 categoria: col4.toUpperCase(),
@@ -522,9 +559,15 @@ function renderTable(dataArray, isGlobalSearch = false) {
             </td>`;
         }
 
+        // Mostrar fecha de ficha y, si existe, fecha de auditoría procesada
+        let fechaDisplay = `<div style="font-weight: 500;">${d.fecha}</div>`;
+        if (d.fechaAudit && d.fechaAudit !== d.fecha) {
+            fechaDisplay += `<div style="font-size: 0.75rem; color: #10b981; margin-top: 2px;">Audit: ${d.fechaAudit}</div>`;
+        }
+
         // Armar el label de estado
         tr.innerHTML = extraTd + `
-            <td style="white-space: nowrap; font-size: 0.8rem; font-weight: 500;">${d.fecha}</td>
+            <td style="white-space: nowrap; font-size: 0.8rem;">${fechaDisplay}</td>
             <td style="font-weight: 600; color: #38bdf8;">${d.asesor}</td>
             <td style="font-weight: 500;">${d.cliente}</td>
             <td>${d.telefono}</td>
@@ -568,7 +611,9 @@ function renderChart(dataArray) {
 
     const groupedByDate = {};
     dataArray.forEach(d => {
-        const date = d.fecha;
+        // PRIORIZAR LA FECHA DE AUDITORÍA EXTRAÍDA
+        const date = d.fechaAudit || d.fecha;
+        
         if (!groupedByDate[date]) {
             groupedByDate[date] = { ACEPTADA: 0, RECHAZADA: 0, CUOTA: 0, DEVUELTA: 0, PENDIENTE: 0 };
         }
@@ -579,7 +624,15 @@ function renderChart(dataArray) {
         else if (d.categoria.includes('PENDIENTE')) groupedByDate[date].PENDIENTE++;
     });
 
-    const labels = Object.keys(groupedByDate);
+    // Ordenar las fechas cronológicamente para que el gráfico no sea un caos
+    const labels = Object.keys(groupedByDate).sort((a, b) => {
+        const parseDate = (dStr) => {
+            const parts = dStr.split('/');
+            if (parts.length < 2) return new Date(0);
+            return new Date(parts[2] || 2026, parts[1] - 1, parts[0]);
+        };
+        return parseDate(a) - parseDate(b);
+    });
     const dataAceptadas = labels.map(l => groupedByDate[l].ACEPTADA);
     const dataRechazadas = labels.map(l => groupedByDate[l].RECHAZADA);
     const dataCuotas = labels.map(l => groupedByDate[l].CUOTA);
@@ -961,8 +1014,9 @@ function parseGlobalData(sede, mesStr, json) {
         if (col1 === '' && col3 !== '' && col4 === '') {
             currentDate = col3;
         } else if (col1 !== '' && col3 !== '') {
-            // Detectar columna DESREGULADAS para búsqueda global
+            // Detectar columnas dinámicamente
             let desreguladaVal = '';
+            let auditIdxGlobal = -1;
             if (json.table.cols) {
                 for (let c = 0; c < json.table.cols.length; c++) {
                     const label = json.table.cols[c] && json.table.cols[c].label
@@ -970,21 +1024,43 @@ function parseGlobalData(sede, mesStr, json) {
                         : '';
                     if (label.includes('DESREGUL')) {
                         desreguladaVal = getVal(c);
-                        break;
+                    }
+                    if (label.includes('FECHA AUD') || label.includes('PROCESO') || label.includes('AUDITORIA')) {
+                        auditIdxGlobal = c;
                     }
                 }
             }
+            if (auditIdxGlobal === -1) auditIdxGlobal = 11; // Fallback col L
+
+            const obs = getVal(6);
+            const est = getVal(7);
+            
+            // Lógica de fecha de auditoría
+            let fAudit = auditIdxGlobal !== -1 ? getVal(auditIdxGlobal) : "";
+            if (!fAudit) {
+                const dReg = /(\d{1,2})[\/-](\d{1,2})/;
+                const matchE = est.match(dReg);
+                if (matchE) {
+                    fAudit = `${matchE[1].padStart(2, '0')}/${matchE[2].padStart(2, '0')}/2026`;
+                } else {
+                    const matchO = obs.match(dReg);
+                    if (matchO) fAudit = `${matchO[1].padStart(2, '0')}/${matchO[2].padStart(2, '0')}/2026`;
+                }
+            }
+            if (!fAudit) fAudit = currentDate;
+
             globalData.push({
                 sedeNombre: sede.nombre,
                 sedeId: sede.id,
                 mes: mesStr,
                 fecha: currentDate,
+                fechaAudit: fAudit,
                 asesor: col1.toUpperCase(),
                 cliente: col3.toUpperCase(),
                 categoria: col4.toUpperCase(),
                 telefono: getVal(5),
-                observacion: getVal(6),
-                estado_auditor: getVal(7),
+                observacion: obs,
+                estado_auditor: est,
                 auditor: getVal(8).toUpperCase(),
                 desregulada: desreguladaVal
             });
