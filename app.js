@@ -1555,9 +1555,16 @@ const DICCIONARIO_CLINICO = [
         color: '#10b981'
     },
     {
-        nombre: 'Afección Visual / Oftalmológica',
+        nombre: 'Cirugía / Traumatología (Ligamentos/Meniscos)',
+        clave: 'TRAUMA_CIRUGIA',
+        regex: /\b(cirug[ií]a|ligamento|ligamentos|menisco|meniscos|rodilla|articular|artroscop|fractura|traumatol[oó]gic[oa]|pr[oó]tesis|meniscopatia)\b/i,
+        icono: 'personal_injury',
+        color: '#fb923c'
+    },
+    {
+        nombre: 'Afección Visual / Oftalmológica (Lentes)',
         clave: 'OFTALMO',
-        regex: /\b(miop[ií]a|astigmatismo|hipermetrop[ií]a|catarata|estrabismo|oftalmo|lentes|anteojos|aumento\s*alto)\b/i,
+        regex: /\b(miop[ií]a|astigmatismo|hipermetrop[ií]a|catarata|estrabismo|oftalmo|lentes|anteojos|aumento\s*alto|visi[oó]n)\b/i,
         icono: 'visibility',
         color: '#38bdf8'
     },
@@ -1666,62 +1673,187 @@ function ejecutarConsultaIA(promptRaw) {
         };
 
         // ENRUTADOR DE INTENCIONES INTELIGENTE
-        const esRankingPatologias = /(ranking|frecuente|patologia|patología|diagnostico|diagnóstico|enfermedad|mas comun|más común)/i.test(queryLower) && !/(rechazo|por que|por qué|juan|carlos|pedro)/i.test(queryLower);
-        const esCausaRechazo = /(rechazo|rechazada|causa de rechazo|motivo de rechazo|por que se rechaza|por qué se rechaza)/i.test(queryLower) && !/(juan|carlos|pedro|maria|maría)/i.test(queryLower);
+        const esRankingPatologias = /(ranking|frecuente|patologia|patología|diagnostico|diagnóstico|enfermedad|mas comun|más común)/i.test(queryLower) && !/(rechazo|por que|por qué|ochoa|martinez|ezequiel|juan|carlos|pedro)/i.test(queryLower);
+        const esCausaRechazo = /(ranking de rechazo|principales causas de rechazo|causas principales|motivos mas frecuentes|por que se rechaza|por qué se rechaza)/i.test(queryLower) && !/(ochoa|martinez|ezequiel|juan|carlos|pedro|maria|maría)/i.test(queryLower);
         const esComparativaSedes = /(comparativa|sedes|provincias|san juan.*salta|salta.*emerald|cual sede|cuál sede|efectividad entre sedes)/i.test(queryLower);
         const esPatologiasMayorRechazo = /(mayor rechazo|más rechazo|mas rechazo|tasa de rechazo|riesgo)/i.test(queryLower);
         
-        // Búsqueda de afiliado específico
-        const matchAfiliado = queryLower.match(/(?:por que fue rechazado|por qué fue rechazado|motivo de|rechazo de|ficha de|caso de|afiliado|cliente)\s+([a-záéíóúñ\s]+)/i);
+        // EXTRACCIÓN AVANZADA DE NOMBRE DE AFILIADO / FICHA
+        function extraerNombreBusqueda(texto) {
+            let t = texto.toLowerCase();
+            const frasesEliminar = [
+                'quiero que me muestres las observaciones de la ficha de',
+                'quiero que me muestres las observaciones de la ficha',
+                'quiero que me muestres las observaciones de',
+                'quiero que me muestres las observaciones del',
+                'quiero que me muestres la ficha de',
+                'quiero que me muestres el caso de',
+                'quiero que me muestres a',
+                'quiero ver las observaciones de la ficha de',
+                'quiero ver las observaciones de',
+                'quiero ver la ficha de',
+                'muestrame las observaciones de la ficha de',
+                'muestrame las observaciones de',
+                'mostrar las observaciones de',
+                'mostrar observaciones de',
+                'cuales son las observaciones de',
+                'cuáles son las observaciones de',
+                'que dice la ficha de',
+                'qué dice la ficha de',
+                'por que fue rechazado el afiliado',
+                'por que fue rechazado',
+                'por qué fue rechazado',
+                'por que fue rechazada',
+                'por qué fue rechazada',
+                'motivo de rechazo de la ficha de',
+                'motivo de rechazo de',
+                'observaciones de la ficha de',
+                'observaciones del afiliado',
+                'observaciones de',
+                'la ficha de',
+                'ficha de',
+                'caso de',
+                'afiliado',
+                'cliente'
+            ];
+            for (const f of frasesEliminar) {
+                if (t.includes(f)) {
+                    t = t.replace(f, ' ');
+                }
+            }
+            // Eliminar colas conversacionales como "que tiene estado rechazado", etc.
+            t = t.replace(/que\s+tiene\s+estado\s+[a-záéíóúñ]+/gi, ' ');
+            t = t.replace(/que\s+fue\s+[a-záéíóúñ]+/gi, ' ');
+            t = t.replace(/con\s+estado\s+[a-záéíóúñ]+/gi, ' ');
+            t = t.replace(/en\s+el\s+drive/gi, ' ');
+            t = t.replace(/por\s+favor/gi, ' ');
+            t = t.replace(/[?¿!¡.,:;"]/g, ' ');
+            return t.trim();
+        }
 
-        // CASO 1: Consulta de Afiliado Específico
-        if (matchAfiliado && matchAfiliado[1].trim().length > 3 && !/(hipertension|diabetes|dbt|hta|epoc|asma|rechazo)/i.test(matchAfiliado[1])) {
-            const nombreBuscado = matchAfiliado[1].trim();
-            const casos = dataPool.filter(d => d.cliente.toLowerCase().includes(nombreBuscado));
-            
+        const nombreLimpio = extraerNombreBusqueda(prompt);
+        const tokensNombre = nombreLimpio.split(/\s+/).filter(t => t.length >= 3 && !['san','juan','salta','emerald','mes','año','2026','ficha','observaciones','estado','rechazado','rechazada','aceptada','aceptado','cuota','devuelta','pendiente'].includes(t));
+
+        // CASO 1: Consulta de Afiliado Específico / Ficha en Drive
+        if (tokensNombre.length > 0 && !esRankingPatologias && !esComparativaSedes) {
+            // Buscar coincidencias en el dataPool completo
+            let poolBusqueda = globalData.length > 0 ? globalData : allData;
+            let casos = poolBusqueda.filter(d => {
+                const nombreCli = d.cliente.toLowerCase();
+                // Coincidencia con todos los tokens o con el string completo
+                return tokensNombre.every(tok => nombreCli.includes(tok));
+            });
+
+            // Si no hay con todos los tokens, buscar con al menos 2 tokens
+            if (casos.length === 0 && tokensNombre.length >= 2) {
+                casos = poolBusqueda.filter(d => {
+                    const nombreCli = d.cliente.toLowerCase();
+                    const matchesCount = tokensNombre.filter(tok => nombreCli.includes(tok)).length;
+                    return matchesCount >= 2;
+                });
+            }
+
             if (casos.length > 0) {
-                resultado.titulo = `Auditoría del Afiliado: ${casos[0].cliente}`;
+                const primerCaso = casos[0];
+                const sedeCaso = primerCaso.sedeNombre || 'San Juan';
+                const mesCaso = primerCaso.mes || 'JULIO';
+                const driveUrl = driveSedesLinks[sedeCaso] || driveSedesLinks['San Juan'];
+                const estadoCarpetaDrive = primerCaso.categoria.includes('RECHAZADA') 
+                    ? `RECHAZADAS ${mesCaso}` 
+                    : (primerCaso.categoria.includes('ACEPTADA') ? `ACEPTADAS ${mesCaso}` : `AUDITORÍAS ${mesCaso}`);
+
+                resultado.titulo = `Expediente Clínico en Drive: ${primerCaso.cliente}`;
+                
                 let textoCasos = casos.map(c => {
-                    const patologias = normalizarEntidadesMedicas((c.observacion || '') + ' ' + (c.estado_auditor || ''));
+                    const obsTexto = c.observacion || c.estado_auditor || 'Sin observaciones adicionales';
+                    const patologias = normalizarEntidadesMedicas(obsTexto + ' ' + (c.estado_auditor || ''));
                     const patStr = patologias.length > 0 
-                        ? `<strong>Patologías detectadas:</strong> ${patologias.map(p => `<span style="color:${p.color}">● ${p.nombre}</span>`).join(', ')}`
-                        : `<em>No se declararon patologías preexistentes graves o está pendiente de documentación.</em>`;
+                        ? patologias.map(p => `<span style="background:rgba(255,255,255,0.06); border:1px solid ${p.color}; color:${p.color}; padding:3px 10px; border-radius:20px; font-size:0.8rem; font-weight:700; display:inline-flex; align-items:center; gap:4px;">● ${p.nombre}</span>`).join(' ')
+                        : `<span style="color:var(--text-muted); font-size:0.85rem;">No se registraron patologías no asegurables adicionales.</span>`;
                     
+                    const rutaDriveEstimada = `Google Drive > ${sedeCaso} > 2026 > ${mesCaso} > ${estadoCarpetaDrive} > ${c.cliente}.pdf`;
+
                     return `
-                        <div style="background: rgba(255,255,255,0.03); border-left: 4px solid ${c.categoria.includes('ACEPTADA') ? '#10b981' : (c.categoria.includes('RECHAZADA') ? '#f43f5e' : '#f59e0b')}; padding: 10px 14px; margin: 8px 0; border-radius: 4px 8px 8px 4px;">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                                <strong style="font-size:1.05rem; color:#f8fafc;">${c.cliente}</strong>
-                                <span class="${getClassByCategoria(c.categoria)}">${c.categoria}</span>
+                        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(192, 132, 252, 0.4); border-left: 5px solid ${c.categoria.includes('ACEPTADA') ? '#10b981' : (c.categoria.includes('RECHAZADA') ? '#f43f5e' : '#f59e0b')}; padding: 1.2rem; margin: 10px 0; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
+                            
+                            <!-- Header Ficha -->
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px; margin-bottom:12px;">
+                                <div>
+                                    <h3 style="margin:0; font-size:1.2rem; color:#f8fafc; font-weight:800; letter-spacing:0.5px;">${c.cliente}</h3>
+                                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
+                                        Sede: <strong style="color:#38bdf8;">${sedeCaso}</strong> · Mes: <strong>${c.mes}</strong> · Fecha de Auditoría: <strong>${c.fecha}</strong> · Asesor: <strong>${c.asesor}</strong>
+                                    </div>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <span class="${getClassByCategoria(c.categoria)}" style="font-size:0.9rem; padding:5px 14px; font-weight:800;">${c.categoria}</span>
+                                    <a href="${driveUrl}" target="_blank" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.2)); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.5); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 5px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span>
+                                        Abrir en Drive
+                                    </a>
+                                </div>
                             </div>
-                            <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:6px;">
-                                Sede: <strong>${c.sedeNombre || 'San Juan'}</strong> · Mes: <strong>${c.mes}</strong> · Fecha: <strong>${c.fecha}</strong> · Asesor: <strong>${c.asesor}</strong> · Auditor: <strong>${c.auditor || 'N/D'}</strong>
+
+                            <!-- Ruta Drive -->
+                            <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px; margin-bottom: 12px; font-size: 0.78rem; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
+                                <span class="material-symbols-outlined" style="font-size: 16px;">snippet_folder</span>
+                                <span><strong>Ubicación en Drive:</strong> ${rutaDriveEstimada}</span>
                             </div>
-                            <div style="margin: 6px 0; font-size:0.9rem;">
-                                <strong>Detalle clínico / Observación:</strong> "${c.observacion || 'Sin observaciones registradas'}"
+
+                            <!-- Observaciones Generales del PDF -->
+                            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
+                                <div style="font-size:0.8rem; font-weight:700; text-transform:uppercase; color:#38bdf8; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                                    <span class="material-symbols-outlined" style="font-size:16px;">clinical_notes</span>
+                                    Observaciones Generales de la Declaración de Salud:
+                                </div>
+                                <div style="font-size:0.95rem; line-height:1.6; color:#f8fafc; font-style:italic;">
+                                    "${obsTexto}"
+                                </div>
+                                ${c.estado_auditor ? `<div style="margin-top:8px; font-size:0.85rem; color:#c084fc;"><strong>Dictamen del Auditor:</strong> ${c.estado_auditor}</div>` : ''}
                             </div>
-                            <div style="font-size:0.85rem; color:#8b5cf6; margin-top:4px;">
-                                <strong>Estado Auditor:</strong> "${c.estado_auditor || '-'}"
+
+                            <!-- Patologías Detectadas por IA -->
+                            <div>
+                                <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">
+                                    Diagnósticos & Antecedentes Clínicos Normalizados:
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    ${patStr}
+                                </div>
                             </div>
-                            <div style="margin-top:6px; font-size:0.85rem;">
-                                ${patStr}
+
+                            <!-- Auditor -->
+                            <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
+                                <span>👨‍⚕️ Auditor Responsable: <strong style="color:#f8fafc;">${c.auditor || 'Matías Gómez'}</strong></span>
+                                <span>Sello: <strong>Red de Servicios Avera · Auditoría de Afiliaciones</strong></span>
                             </div>
+
                         </div>
                     `;
                 }).join('');
 
                 resultado.textoHtml = `
-                    <p>Se encontraron <strong>${casos.length}</strong> registro(s) históricos para la búsqueda de <em>"${nombreBuscado.toUpperCase()}"</em>:</p>
+                    <p style="margin-top:0;">Se localizó la ficha médica correspondiente en la base de <strong>${sedeCaso}</strong>:</p>
                     ${textoCasos}
                 `;
                 resultado.evidencias = casos;
                 resultado.metricas = [
-                    { val: casos.length, lbl: 'Registros Hallados', col: '#38bdf8' },
-                    { val: casos[0].categoria, lbl: 'Último Estado', col: casos[0].categoria.includes('ACEPTADA') ? '#10b981' : '#f43f5e' },
-                    { val: casos[0].auditor || 'N/D', lbl: 'Auditor Asignado', col: '#a78bfa' }
+                    { val: primerCaso.cliente.split(' ')[0], lbl: 'Afiliado Identificado', col: '#c084fc' },
+                    { val: primerCaso.categoria, lbl: 'Estado Dictaminado', col: primerCaso.categoria.includes('ACEPTADA') ? '#10b981' : '#f43f5e' },
+                    { val: sedeCaso, lbl: 'Sede en Drive', col: '#38bdf8' }
                 ];
             } else {
-                resultado.titulo = `Búsqueda de Afiliado: ${nombreBuscado.toUpperCase()}`;
-                resultado.textoHtml = `<p style="color:#f43f5e;">⚠️ No se encontró ningún afiliado con el nombre o coincidencia <strong>"${nombreBuscado}"</strong> en la base histórica de ${aiSedeActual === 'GLOBAL' ? 'todas las sedes' : aiSedeActual}. Verifique la ortografía o consulte con un término más corto.</p>`;
+                resultado.titulo = `Búsqueda de Ficha: "${nombreLimpio.toUpperCase()}"`;
+                resultado.textoHtml = `
+                    <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 10px; padding: 14px; color: #fecdd3;">
+                        <div style="font-weight: 700; font-size: 1rem; margin-bottom: 4px; display:flex; align-items:center; gap:6px;">
+                            <span class="material-symbols-outlined">search_off</span>
+                            No se encontró la ficha con el nombre "${nombreLimpio.toUpperCase()}"
+                        </div>
+                        <p style="margin: 0; font-size: 0.88rem; line-height: 1.5;">
+                            Se buscó en las carpetas y registros de <strong>San Juan, Salta y Protección Emerald</strong>. Verifique si el apellido o nombre contiene errores de tipeo o pruebe buscando únicamente por el apellido (ej: <em>Ochoa</em>).
+                        </p>
+                    </div>
+                `;
             }
         }
         // CASO 2: Ranking de Patologías Más Frecuentes
