@@ -728,3 +728,75 @@ body.light-theme .flap-sep {
         gap: 15px;
     }
 }
+
+/* ============================================================
+   AI INTELLIGENCE MODULE STYLES
+   ============================================================ */
+
+.btn-ai-pulse {
+    position: relative;
+    overflow: hidden;
+    animation: aiGlow 3s infinite alternate;
+}
+
+@keyframes aiGlow {
+    0% {
+        box-shadow: 0 0 8px rgba(168, 85, 247, 0.2);
+        border-color: rgba(192, 132, 252, 0.4);
+    }
+    100% {
+        box-shadow: 0 0 18px rgba(56, 189, 248, 0.4), 0 0 30px rgba(168, 85, 247, 0.25);
+        border-color: rgba(56, 189, 248, 0.8);
+    }
+}
+
+.ai-chip-btn {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-muted);
+    border: 1px solid var(--border-color);
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.ai-chip-btn:hover {
+    background: rgba(168, 85, 247, 0.15);
+    color: #c084fc;
+    border-color: rgba(192, 132, 252, 0.5);
+    transform: translateY(-1px);
+}
+
+.ai-sede-btn {
+    transition: all 0.2s ease;
+}
+
+.ai-metric-pill {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--border-color);
+    padding: 8px 14px;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 130px;
+}
+
+.ai-metric-pill .val {
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+
+.ai-metric-pill .lbl {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}

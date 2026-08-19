@@ -132,6 +132,73 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // Modal Consultas Inteligentes (IA) Toggle
+    const btnAIConsultas = document.getElementById('btn-ai-consultas');
+    const modalAI = document.getElementById('ai-modal');
+    const btnCerrarAI = document.getElementById('close-ai');
+    const btnSubmitAI = document.getElementById('btn-ai-submit');
+    const inputAIQuery = document.getElementById('ai-query-input');
+
+    if (btnAIConsultas && modalAI) {
+        btnAIConsultas.addEventListener('click', () => {
+            abrirModalAI();
+        });
+
+        if (btnCerrarAI) {
+            btnCerrarAI.addEventListener('click', () => {
+                modalAI.style.display = 'none';
+            });
+        }
+
+        modalAI.addEventListener('click', (e) => {
+            if (e.target === modalAI) modalAI.style.display = 'none';
+        });
+
+        if (btnSubmitAI && inputAIQuery) {
+            btnSubmitAI.addEventListener('click', () => {
+                const query = inputAIQuery.value.trim();
+                if (query) ejecutarConsultaIA(query);
+            });
+
+            inputAIQuery.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    const query = inputAIQuery.value.trim();
+                    if (query) ejecutarConsultaIA(query);
+                }
+            });
+        }
+
+        // Chips de sugerencias rápidas
+        document.querySelectorAll('.ai-chip-btn').forEach(chip => {
+            chip.addEventListener('click', (e) => {
+                const query = chip.getAttribute('data-query');
+                if (inputAIQuery) inputAIQuery.value = query;
+                ejecutarConsultaIA(query);
+            });
+        });
+
+        // Selector de Sedes de IA
+        document.querySelectorAll('.ai-sede-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.ai-sede-btn').forEach(b => {
+                    b.classList.remove('active');
+                    b.style.background = 'transparent';
+                    b.style.color = 'var(--text-muted)';
+                    b.style.borderColor = 'var(--border-color)';
+                });
+                btn.classList.add('active');
+                btn.style.background = 'rgba(168, 85, 247, 0.25)';
+                btn.style.color = '#c084fc';
+                btn.style.borderColor = 'rgba(192, 132, 252, 0.6)';
+                
+                aiSedeActual = btn.getAttribute('data-sede');
+                if (inputAIQuery && inputAIQuery.value.trim()) {
+                    ejecutarConsultaIA(inputAIQuery.value.trim());
+                }
+            });
+        });
+    }
+
     // Reloj en tiempo real
     setInterval(actualizarReloj, 1000);
     actualizarReloj();
@@ -1404,3 +1471,611 @@ function renderTablaAsesores(data, filtro, mesFiltro) {
         <span style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.4); padding:4px 14px; border-radius:20px; font-weight:700;">Efectividad global: ${efecGeneral}%</span>
     `;
 }
+
+// ============================================================
+// MODAL & MOTOR DE INTELIGENCIA MÉDICA (GRAVITY AI CORE)
+// ============================================================
+
+let aiChartInstance = null;
+let aiSedeActual = 'GLOBAL';
+
+const driveSedesLinks = {
+    'San Juan': 'https://drive.google.com/drive/folders/17v74FdBKgBPYdmlxQZBxaZCN4jqxlmyJ?usp=sharing',
+    'Salta': 'https://drive.google.com/drive/folders/1OsxS6C617GibnELKd-bKAqC9ust_-ist?usp=sharing',
+    'Protección Emerald': 'https://drive.google.com/drive/folders/1EFeyZaGaKETkRl0M-LCU5a6gcgvldA-3?usp=sharing'
+};
+
+function abrirModalAI() {
+    const modalAI = document.getElementById('ai-modal');
+    if (modalAI) {
+        modalAI.style.display = 'flex';
+        // Si globalData aún se está cargando, asegurarse de cargarla
+        if (globalData.length === 0 && !isLoadingGlobalData) {
+            loadGlobalDataBkg();
+        }
+    }
+}
+
+// DICCIONARIO ONTOLÓGICO CLÍNICO CON PATRONES DE NORMALIZACIÓN
+const DICCIONARIO_CLINICO = [
+    {
+        nombre: 'Hipertensión Arterial (HTA)',
+        clave: 'HTA',
+        regex: /\b(hta|hipertension|hipertens|presion\s*alta|hipertenso|hipertensa|presi[oó]n|enalapril|losartan|atenolol|amlodipina)\b/i,
+        icono: 'favorite',
+        color: '#f43f5e'
+    },
+    {
+        nombre: 'Diabetes Mellitus (DBT)',
+        clave: 'DBT',
+        regex: /\b(dbt|diabetes|diab[eé]tic[oa]|glucemia|insulina|niddm|metformina|glibenclamida)\b/i,
+        icono: 'water_drop',
+        color: '#f59e0b'
+    },
+    {
+        nombre: 'Dislipidemia / Colesterol',
+        clave: 'DISLIPEMIA',
+        regex: /\b(dislipemia|colesterol|triglic[eé]ridos|dlp|hipercolesterolemia|l[ií]pidos|atorvastatina|rosuvastatina)\b/i,
+        icono: 'opacity',
+        color: '#eab308'
+    },
+    {
+        nombre: 'Hipotiroidismo / Enf. Tiroidea',
+        clave: 'TIROIDES',
+        regex: /\b(hipotiroidismo|tiroides|hashimoto|eutirox|levotiroxina|hipertiroidismo|t3|t4|tsh|bocio|nodulo\s*tiroideo)\b/i,
+        icono: 'emergency',
+        color: '#8b5cf6'
+    },
+    {
+        nombre: 'Asma Bronquial / Respiratorio',
+        clave: 'ASMA',
+        regex: /\b(asma|asm[aá]tic[oa]|broncoespasmo|salbutamol|aerosol|puf|puffs|budecort|seretide|nebulizaciones)\b/i,
+        icono: 'air',
+        color: '#06b6d4'
+    },
+    {
+        nombre: 'EPOC / Enfisema',
+        clave: 'EPOC',
+        regex: /\b(epoc|enfisema|bronquitis\s*cr[oó]nica|tabaquismo\s*cr[oó]nico)\b/i,
+        icono: 'lungs',
+        color: '#0284c7'
+    },
+    {
+        nombre: 'Cardiopatía / Enf. Cardiovascular',
+        clave: 'CARDIOPATIA',
+        regex: /\b(cardiopat[ií]a|coronari[oa]|stent|bypass|arritmia|infarto|insuficiencia\s*card[ií]aca|isquemia|marcapaso|angina\s*de\s*pecho)\b/i,
+        icono: 'ecg_heart',
+        color: '#ef4444'
+    },
+    {
+        nombre: 'Patología de Columna / Hernia',
+        clave: 'COLUMNA',
+        regex: /\b(hernia|hernias|discal|lumbalgia|ci[aá]tica|columna|cervicobraquialgia|lumbociatalgia|escoliosis|operacion\s*de\s*columna)\b/i,
+        icono: 'accessibility_new',
+        color: '#10b981'
+    },
+    {
+        nombre: 'Afección Visual / Oftalmológica',
+        clave: 'OFTALMO',
+        regex: /\b(miop[ií]a|astigmatismo|hipermetrop[ií]a|catarata|estrabismo|oftalmo|lentes|anteojos|aumento\s*alto)\b/i,
+        icono: 'visibility',
+        color: '#38bdf8'
+    },
+    {
+        nombre: 'Neurológico / Epilepsia / ACV',
+        clave: 'NEURO',
+        regex: /\b(convulsi[oó]n|convulsiones|epilepsia|epil[eé]ptic[oa]|neurol[oó]gic[oa]|eeg|acv|isqu[eé]mico|cefalea\s*cr[oó]nica|migra[ñn]a)\b/i,
+        icono: 'neurology',
+        color: '#ec4899'
+    },
+    {
+        nombre: 'Salud Mental / Psiquiatría',
+        clave: 'PSICOLOGICO',
+        regex: /\b(psicol[oó]gic[oa]|psiqui[aá]tric[oa]|psiquiatra|psic[oó]logo|ansiedad|depresi[oó]n|p[aá]nico|antidepresivo|clonazepam|sertralina|alplax)\b/i,
+        icono: 'mood',
+        color: '#d946ef'
+    },
+    {
+        nombre: 'Gastrointestinal / Celíaca / Hepático',
+        clave: 'GASTRO',
+        regex: /\b(gastritis|reflujo|colon|[uú]lcera|hepatitis|ves[ií]cula|h[ií]gado\s*graso|celiaqu[ií]a|cel[ií]ac[oa]|pancreatitis)\b/i,
+        icono: 'nutrition',
+        color: '#f97316'
+    },
+    {
+        nombre: 'Oncológico / Neoplasia',
+        clave: 'ONCOLOGICO',
+        regex: /\b(c[aá]ncer|tumor|oncol[oó]gic[oa]|quimioterapia|radioterapia|carcinoma|linfoma|leucemia|melanoma)\b/i,
+        icono: 'coronavirus',
+        color: '#991b1b'
+    },
+    {
+        nombre: 'Reumatológico / Autoinmune',
+        clave: 'AUTOINMUNE',
+        regex: /\b(lupus|artritis|artrosis|fibromialgia|reuma|psoriasis|esclerosis|articular)\b/i,
+        icono: 'healing',
+        color: '#6366f1'
+    },
+    {
+        nombre: 'Control Gineco-Obstétrico / FUM',
+        clave: 'GINECO',
+        regex: /\b(fum|embarazo|embarazada|gestante|parto|ces[aá]rea|maternidad|semanas\s*de\s*gestaci[oó]n)\b/i,
+        icono: 'pregnant_woman',
+        color: '#ec4899'
+    },
+    {
+        nombre: 'Falta Documentación / Libreta Salud',
+        clave: 'DOC_FALTANTE',
+        regex: /\b(teresa|libreta|falta\s*firma|falta\s*dni|incompleto|documentaci[oó]n|sin\s*constancia)\b/i,
+        icono: 'folder_open',
+        color: '#64748b'
+    }
+];
+
+function normalizarEntidadesMedicas(texto) {
+    if (!texto) return [];
+    const detectadas = [];
+    const t = String(texto).toLowerCase();
+    
+    DICCIONARIO_CLINICO.forEach(pat => {
+        if (pat.regex.test(t)) {
+            detectadas.push(pat);
+        }
+    });
+    return detectadas;
+}
+
+function ejecutarConsultaIA(promptRaw) {
+    const startTime = performance.now();
+    const prompt = String(promptRaw).trim();
+    if (!prompt) return;
+
+    // Elementos UI
+    const placeholder = document.getElementById('ai-placeholder');
+    const loading = document.getElementById('ai-loading');
+    const activeResponse = document.getElementById('ai-active-response');
+    const titleEl = document.getElementById('ai-response-title');
+    const textEl = document.getElementById('ai-response-text');
+    const metricsEl = document.getElementById('ai-metrics-summary');
+    const chartWrapper = document.getElementById('ai-chart-wrapper');
+    const chartTitle = document.getElementById('ai-chart-title');
+    const tableWrapper = document.getElementById('ai-table-wrapper');
+    const tableCount = document.getElementById('ai-table-count');
+    const tableBody = document.getElementById('ai-evidence-body');
+    const timeEl = document.getElementById('ai-query-time');
+
+    placeholder.style.display = 'none';
+    activeResponse.style.display = 'none';
+    loading.style.display = 'block';
+
+    // Obtener universo de datos
+    let dataPool = globalData.length > 0 ? globalData : allData;
+    if (aiSedeActual !== 'GLOBAL') {
+        dataPool = dataPool.filter(d => (d.sedeNombre || '').toUpperCase() === aiSedeActual.toUpperCase());
+    }
+
+    // Simular latencia de procesamiento instantánea (~300ms)
+    setTimeout(() => {
+        const queryLower = prompt.toLowerCase();
+        let resultado = {
+            titulo: 'Análisis Clínico & Gerencial',
+            textoHtml: '',
+            metricas: [],
+            chart: null,
+            evidencias: []
+        };
+
+        // ENRUTADOR DE INTENCIONES INTELIGENTE
+        const esRankingPatologias = /(ranking|frecuente|patologia|patología|diagnostico|diagnóstico|enfermedad|mas comun|más común)/i.test(queryLower) && !/(rechazo|por que|por qué|juan|carlos|pedro)/i.test(queryLower);
+        const esCausaRechazo = /(rechazo|rechazada|causa de rechazo|motivo de rechazo|por que se rechaza|por qué se rechaza)/i.test(queryLower) && !/(juan|carlos|pedro|maria|maría)/i.test(queryLower);
+        const esComparativaSedes = /(comparativa|sedes|provincias|san juan.*salta|salta.*emerald|cual sede|cuál sede|efectividad entre sedes)/i.test(queryLower);
+        const esPatologiasMayorRechazo = /(mayor rechazo|más rechazo|mas rechazo|tasa de rechazo|riesgo)/i.test(queryLower);
+        
+        // Búsqueda de afiliado específico
+        const matchAfiliado = queryLower.match(/(?:por que fue rechazado|por qué fue rechazado|motivo de|rechazo de|ficha de|caso de|afiliado|cliente)\s+([a-záéíóúñ\s]+)/i);
+
+        // CASO 1: Consulta de Afiliado Específico
+        if (matchAfiliado && matchAfiliado[1].trim().length > 3 && !/(hipertension|diabetes|dbt|hta|epoc|asma|rechazo)/i.test(matchAfiliado[1])) {
+            const nombreBuscado = matchAfiliado[1].trim();
+            const casos = dataPool.filter(d => d.cliente.toLowerCase().includes(nombreBuscado));
+            
+            if (casos.length > 0) {
+                resultado.titulo = `Auditoría del Afiliado: ${casos[0].cliente}`;
+                let textoCasos = casos.map(c => {
+                    const patologias = normalizarEntidadesMedicas((c.observacion || '') + ' ' + (c.estado_auditor || ''));
+                    const patStr = patologias.length > 0 
+                        ? `<strong>Patologías detectadas:</strong> ${patologias.map(p => `<span style="color:${p.color}">● ${p.nombre}</span>`).join(', ')}`
+                        : `<em>No se declararon patologías preexistentes graves o está pendiente de documentación.</em>`;
+                    
+                    return `
+                        <div style="background: rgba(255,255,255,0.03); border-left: 4px solid ${c.categoria.includes('ACEPTADA') ? '#10b981' : (c.categoria.includes('RECHAZADA') ? '#f43f5e' : '#f59e0b')}; padding: 10px 14px; margin: 8px 0; border-radius: 4px 8px 8px 4px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                <strong style="font-size:1.05rem; color:#f8fafc;">${c.cliente}</strong>
+                                <span class="${getClassByCategoria(c.categoria)}">${c.categoria}</span>
+                            </div>
+                            <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:6px;">
+                                Sede: <strong>${c.sedeNombre || 'San Juan'}</strong> · Mes: <strong>${c.mes}</strong> · Fecha: <strong>${c.fecha}</strong> · Asesor: <strong>${c.asesor}</strong> · Auditor: <strong>${c.auditor || 'N/D'}</strong>
+                            </div>
+                            <div style="margin: 6px 0; font-size:0.9rem;">
+                                <strong>Detalle clínico / Observación:</strong> "${c.observacion || 'Sin observaciones registradas'}"
+                            </div>
+                            <div style="font-size:0.85rem; color:#8b5cf6; margin-top:4px;">
+                                <strong>Estado Auditor:</strong> "${c.estado_auditor || '-'}"
+                            </div>
+                            <div style="margin-top:6px; font-size:0.85rem;">
+                                ${patStr}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                resultado.textoHtml = `
+                    <p>Se encontraron <strong>${casos.length}</strong> registro(s) históricos para la búsqueda de <em>"${nombreBuscado.toUpperCase()}"</em>:</p>
+                    ${textoCasos}
+                `;
+                resultado.evidencias = casos;
+                resultado.metricas = [
+                    { val: casos.length, lbl: 'Registros Hallados', col: '#38bdf8' },
+                    { val: casos[0].categoria, lbl: 'Último Estado', col: casos[0].categoria.includes('ACEPTADA') ? '#10b981' : '#f43f5e' },
+                    { val: casos[0].auditor || 'N/D', lbl: 'Auditor Asignado', col: '#a78bfa' }
+                ];
+            } else {
+                resultado.titulo = `Búsqueda de Afiliado: ${nombreBuscado.toUpperCase()}`;
+                resultado.textoHtml = `<p style="color:#f43f5e;">⚠️ No se encontró ningún afiliado con el nombre o coincidencia <strong>"${nombreBuscado}"</strong> en la base histórica de ${aiSedeActual === 'GLOBAL' ? 'todas las sedes' : aiSedeActual}. Verifique la ortografía o consulte con un término más corto.</p>`;
+            }
+        }
+        // CASO 2: Ranking de Patologías Más Frecuentes
+        else if (esRankingPatologias) {
+            const conteo = {};
+            DICCIONARIO_CLINICO.forEach(p => { conteo[p.clave] = { ...p, total: 0, aceptadas: 0, rechazadas: 0, devueltas: 0 }; });
+
+            dataPool.forEach(d => {
+                const texto = (d.observacion || '') + ' ' + (d.estado_auditor || '');
+                const detectadas = normalizarEntidadesMedicas(texto);
+                detectadas.forEach(p => {
+                    conteo[p.clave].total++;
+                    if (d.categoria.includes('ACEPTADA')) conteo[p.clave].aceptadas++;
+                    else if (d.categoria.includes('RECHAZADA')) conteo[p.clave].rechazadas++;
+                    else if (d.categoria.includes('DEVUELTA')) conteo[p.clave].devueltas++;
+                });
+            });
+
+            const ranking = Object.values(conteo).filter(p => p.total > 0).sort((a, b) => b.total - a.total);
+            const totalCasosClinicos = ranking.reduce((acc, curr) => acc + curr.total, 0);
+
+            resultado.titulo = `Ranking de Patologías Frecuentes (${aiSedeActual === 'GLOBAL' ? 'Todas las Sedes' : aiSedeActual})`;
+            
+            let itemsHtml = ranking.slice(0, 5).map((p, idx) => `
+                <li style="margin-bottom:6px;">
+                    <strong>#${idx + 1} ${p.nombre}:</strong> ${p.total} casos identificados 
+                    <span style="color:#10b981;">(${p.aceptadas} aceptadas)</span> · 
+                    <span style="color:#f43f5e;">(${p.rechazadas} rechazadas)</span>.
+                </li>
+            `).join('');
+
+            resultado.textoHtml = `
+                <p>Se analizaron <strong>${dataPool.length} expedientes</strong> y se normalizaron <strong>${totalCasosClinicos} menciones clínicas</strong>. A continuación las patologías con mayor incidencia en las declaraciones de salud:</p>
+                <ol style="padding-left: 20px; line-height: 1.7;">
+                    ${itemsHtml || '<li>No se detectaron menciones clínicas normalizadas suficientes en esta selección.</li>'}
+                </ol>
+                <p style="color:var(--text-muted); font-size:0.85rem; margin-top:8px;">
+                    💡 <em>Insight Gerencial:</em> La normalización automática unificó siglas como HTA, presión alta, DBT, glucemia y afecciones tiroideas en sus diagnósticos estándar.
+                </p>
+            `;
+
+            resultado.metricas = [
+                { val: ranking.length > 0 ? ranking[0].nombre.split(' ')[0] : 'N/A', lbl: 'Patología #1', col: '#c084fc' },
+                { val: totalCasosClinicos, lbl: 'Total Menciones Clínicas', col: '#38bdf8' },
+                { val: dataPool.length, lbl: 'Expedientes Analizados', col: '#10b981' }
+            ];
+
+            resultado.chart = {
+                type: 'bar',
+                title: 'Top 7 Patologías más Frecuentes',
+                labels: ranking.slice(0, 7).map(r => r.nombre.split('/')[0].trim()),
+                datasets: [
+                    {
+                        label: 'Aceptadas',
+                        data: ranking.slice(0, 7).map(r => r.aceptadas),
+                        backgroundColor: 'rgba(16, 185, 129, 0.8)'
+                    },
+                    {
+                        label: 'Rechazadas',
+                        data: ranking.slice(0, 7).map(r => r.rechazadas),
+                        backgroundColor: 'rgba(244, 63, 94, 0.8)'
+                    },
+                    {
+                        label: 'Devueltas',
+                        data: ranking.slice(0, 7).map(r => r.devueltas),
+                        backgroundColor: 'rgba(245, 158, 11, 0.8)'
+                    }
+                ]
+            };
+
+            // Filtrar evidencias
+            resultado.evidencias = dataPool.filter(d => normalizarEntidadesMedicas((d.observacion || '') + ' ' + (d.estado_auditor || '')).length > 0).slice(0, 50);
+        }
+        // CASO 3: Causas Principales de Rechazo
+        else if (esCausaRechazo) {
+            const rechazos = dataPool.filter(d => d.categoria.includes('RECHAZADA') || d.categoria.includes('DEVUELTA'));
+            const causasConteo = {};
+            DICCIONARIO_CLINICO.forEach(p => { causasConteo[p.clave] = { ...p, count: 0 }; });
+            let causaDocFaltante = 0;
+            let otrasCausas = 0;
+
+            rechazos.forEach(d => {
+                const texto = (d.observacion || '') + ' ' + (d.estado_auditor || '');
+                const detectadas = normalizarEntidadesMedicas(texto);
+                if (detectadas.length > 0) {
+                    detectadas.forEach(p => causasConteo[p.clave].count++);
+                } else {
+                    otrasCausas++;
+                }
+            });
+
+            const topCausas = Object.values(causasConteo).filter(c => c.count > 0).sort((a, b) => b.count - a.count);
+
+            resultado.titulo = `Análisis Causal de Rechazos y Devoluciones (${aiSedeActual === 'GLOBAL' ? 'Global' : aiSedeActual})`;
+            resultado.textoHtml = `
+                <p>Sobre un total de <strong>${rechazos.length} fichas no aprobadas</strong> (${dataPool.filter(d => d.categoria.includes('RECHAZADA')).length} Rechazadas y ${dataPool.filter(d => d.categoria.includes('DEVUELTA')).length} Devueltas), las causales predominantes son:</p>
+                <ul style="padding-left: 20px; line-height: 1.7;">
+                    ${topCausas.slice(0, 4).map(c => `<li><strong>${c.nombre}:</strong> Presente en ${c.count} rechazos/devoluciones como factor excluyente o preexistencia médica no asegurable.</li>`).join('')}
+                    <li><strong>Otras causales médicas / edad / falta de documentación:</strong> ${otrasCausas} casos.</li>
+                </ul>
+            `;
+
+            resultado.metricas = [
+                { val: rechazos.length, lbl: 'Total Rechazadas/Dev.', col: '#f43f5e' },
+                { val: topCausas.length > 0 ? topCausas[0].nombre.split(' ')[0] : 'N/A', lbl: 'Causa Clínica Principal', col: '#f59e0b' },
+                { val: ((rechazos.length / (dataPool.length || 1)) * 100).toFixed(1) + '%', lbl: 'Tasa de No Aprobación', col: '#ef4444' }
+            ];
+
+            resultado.chart = {
+                type: 'doughnut',
+                title: 'Distribución de Causas de Rechazo & Devolución',
+                labels: topCausas.slice(0, 6).map(c => c.nombre.split('/')[0].trim()).concat(['Otras causas']),
+                datasets: [{
+                    data: topCausas.slice(0, 6).map(c => c.count).concat([otrasCausas]),
+                    backgroundColor: ['#f43f5e', '#f59e0b', '#8b5cf6', '#3b82f6', '#06b6d4', '#ec4899', '#64748b']
+                }]
+            };
+
+            resultado.evidencias = rechazos.slice(0, 50);
+        }
+        // CASO 4: Comparativa entre Sedes
+        else if (esComparativaSedes) {
+            const sedesList = ['San Juan', 'Salta', 'Protección Emerald'];
+            const statsSedes = sedesList.map(nombre => {
+                const arr = (globalData.length > 0 ? globalData : allData).filter(d => (d.sedeNombre || 'San Juan').toUpperCase() === nombre.toUpperCase());
+                const acep = arr.filter(d => d.categoria.includes('ACEPTADA')).length;
+                const rech = arr.filter(d => d.categoria.includes('RECHAZADA')).length;
+                const cuot = arr.filter(d => d.categoria.includes('CUOTA')).length;
+                const dev = arr.filter(d => d.categoria.includes('DEVUELTA')).length;
+                const pend = arr.filter(d => d.categoria.includes('PENDIENTE')).length;
+                const den = acep + cuot + rech + dev;
+                const efec = den > 0 ? Math.round(((acep + cuot) / den) * 100) : 0;
+                return { nombre, total: arr.length, acep, rech, cuot, dev, pend, efec };
+            });
+
+            resultado.titulo = 'Comparativa Gerencial entre Sedes';
+            resultado.textoHtml = `
+                <p>Resumen comparativo de rendimiento y efectividad de auditoría entre las 3 sedes:</p>
+                <ul style="padding-left:20px; line-height:1.7;">
+                    ${statsSedes.map(s => `
+                        <li><strong>${s.nombre}:</strong> <strong>${s.total}</strong> fichas totales · <strong>${s.efec}% efectividad</strong> (${s.acep} aceptadas, ${s.cuot} cuotas, ${s.rech} rechazadas, ${s.dev} devueltas).</li>
+                    `).join('')}
+                </ul>
+            `;
+
+            resultado.metricas = statsSedes.map(s => ({
+                val: `${s.efec}% (${s.total})`,
+                lbl: s.nombre,
+                col: s.nombre === 'San Juan' ? '#8b5cf6' : (s.nombre === 'Salta' ? '#38bdf8' : '#10b981')
+            }));
+
+            resultado.chart = {
+                type: 'bar',
+                title: 'Volumen y Estados por Sede',
+                labels: statsSedes.map(s => s.nombre),
+                datasets: [
+                    { label: 'Aceptadas', data: statsSedes.map(s => s.acep), backgroundColor: '#10b981' },
+                    { label: 'Cuotas', data: statsSedes.map(s => s.cuot), backgroundColor: '#3b82f6' },
+                    { label: 'Rechazadas', data: statsSedes.map(s => s.rech), backgroundColor: '#f43f5e' },
+                    { label: 'Devueltas', data: statsSedes.map(s => s.dev), backgroundColor: '#f59e0b' }
+                ]
+            };
+
+            resultado.evidencias = (globalData.length > 0 ? globalData : allData).slice(0, 50);
+        }
+        // CASO 5: Consulta por Patología Específica (ej: Hipertensión / HTA, Diabetes, Tiroides, etc.)
+        else {
+            let patologiaBuscada = null;
+            for (const pat of DICCIONARIO_CLINICO) {
+                if (pat.regex.test(queryLower) || queryLower.includes(pat.clave.toLowerCase()) || queryLower.includes(pat.nombre.toLowerCase())) {
+                    patologiaBuscada = pat;
+                    break;
+                }
+            }
+
+            if (patologiaBuscada) {
+                const coincidencias = dataPool.filter(d => {
+                    const texto = (d.observacion || '') + ' ' + (d.estado_auditor || '');
+                    return patologiaBuscada.regex.test(texto);
+                });
+
+                const acep = coincidencias.filter(d => d.categoria.includes('ACEPTADA')).length;
+                const rech = coincidencias.filter(d => d.categoria.includes('RECHAZADA')).length;
+                const cuot = coincidencias.filter(d => d.categoria.includes('CUOTA')).length;
+                const dev = coincidencias.filter(d => d.categoria.includes('DEVUELTA')).length;
+                const pend = coincidencias.filter(d => d.categoria.includes('PENDIENTE')).length;
+                const den = acep + cuot + rech + dev;
+                const tasaAprobacion = den > 0 ? Math.round(((acep + cuot) / den) * 100) : 0;
+
+                resultado.titulo = `Análisis de Casos: ${patologiaBuscada.nombre}`;
+                resultado.textoHtml = `
+                    <p>Se identificaron <strong>${coincidencias.length} casos</strong> con antecedentes o diagnósticos de <strong>${patologiaBuscada.nombre}</strong> en ${aiSedeActual === 'GLOBAL' ? 'todas las sedes' : aiSedeActual}.</p>
+                    <div style="background:rgba(255,255,255,0.03); padding:12px 16px; border-radius:8px; margin:10px 0; border-left:4px solid ${patologiaBuscada.color};">
+                        <strong>Desglose de Resoluciones:</strong>
+                        <ul style="margin:6px 0 0 0; padding-left:20px;">
+                            <li><span style="color:#10b981; font-weight:700;">Aceptadas Limpias:</span> ${acep} (${den > 0 ? Math.round((acep/den)*100) : 0}%)</li>
+                            <li><span style="color:#3b82f6; font-weight:700;">Cuotas Diferenciales / Extra-prima:</span> ${cuot} (${den > 0 ? Math.round((cuot/den)*100) : 0}%)</li>
+                            <li><span style="color:#f43f5e; font-weight:700;">Rechazadas:</span> ${rech} (${den > 0 ? Math.round((rech/den)*100) : 0}%)</li>
+                            <li><span style="color:#f59e0b; font-weight:700;">Devueltas para Estudios:</span> ${dev}</li>
+                            <li><span style="color:#8b5cf6; font-weight:700;">Pendientes de Resolución:</span> ${pend}</li>
+                        </ul>
+                    </div>
+                `;
+
+                resultado.metricas = [
+                    { val: coincidencias.length, lbl: 'Total Casos Detectados', col: patologiaBuscada.color },
+                    { val: `${tasaAprobacion}%`, lbl: 'Tasa Aprobación (Acep+Cuota)', col: '#10b981' },
+                    { val: rech, lbl: 'Rechazos', col: '#f43f5e' }
+                ];
+
+                resultado.chart = {
+                    type: 'pie',
+                    title: `Resolución de Auditoría para ${patologiaBuscada.nombre.split('/')[0]}`,
+                    labels: ['Aceptadas', 'Cuotas', 'Rechazadas', 'Devueltas', 'Pendientes'],
+                    datasets: [{
+                        data: [acep, cuot, rech, dev, pend],
+                        backgroundColor: ['#10b981', '#3b82f6', '#f43f5e', '#f59e0b', '#8b5cf6']
+                    }]
+                };
+
+                resultado.evidencias = coincidencias;
+            } else {
+                // Búsqueda Semántica Abierta
+                const matches = dataPool.filter(d => {
+                    const texto = `${d.cliente} ${d.asesor} ${d.observacion} ${d.estado_auditor} ${d.categoria} ${d.auditor}`.toLowerCase();
+                    return queryLower.split(' ').some(w => w.length > 3 && texto.includes(w));
+                });
+
+                resultado.titulo = `Resultado de Consulta: "${prompt}"`;
+                resultado.textoHtml = `
+                    <p>Se procesó la consulta utilizando análisis de concordancia semántica sobre la base histórica (${aiSedeActual}). Se detectaron <strong>${matches.length} registros relevantes</strong>.</p>
+                `;
+                resultado.metricas = [
+                    { val: matches.length, lbl: 'Registros Coincidentes', col: '#38bdf8' },
+                    { val: dataPool.length, lbl: 'Base Analizada', col: '#a78bfa' }
+                ];
+                resultado.evidencias = matches.slice(0, 50);
+            }
+        }
+
+        // RENDERIZAR RESULTADOS
+        const endTime = performance.now();
+        const duration = ((endTime - startTime) / 1000).toFixed(2);
+        timeEl.innerText = `Respuesta en ${duration}s · Base: ${dataPool.length} registros`;
+
+        titleEl.innerText = resultado.titulo;
+        textEl.innerHTML = resultado.textoHtml;
+
+        // Renderizar pastillas de métricas
+        metricsEl.innerHTML = resultado.metricas.map(m => `
+            <div class="ai-metric-pill" style="border-left: 3px solid ${m.col || '#38bdf8'};">
+                <span class="val" style="color: ${m.col || '#f8fafc'};">${m.val}</span>
+                <span class="lbl">${m.lbl}</span>
+            </div>
+        `).join('');
+
+        // Renderizar Gráfico
+        if (resultado.chart) {
+            chartWrapper.style.display = 'block';
+            chartTitle.innerText = resultado.chart.title || 'Distribución Analítica';
+            renderizarGraficoIA(resultado.chart);
+        } else {
+            chartWrapper.style.display = 'none';
+        }
+
+        // Renderizar Tabla de Evidencias
+        if (resultado.evidencias && resultado.evidencias.length > 0) {
+            tableWrapper.style.display = 'block';
+            tableCount.innerText = resultado.evidencias.length;
+            
+            tableBody.innerHTML = resultado.evidencias.slice(0, 60).map(d => {
+                const sedeNombre = d.sedeNombre || 'San Juan';
+                const driveUrl = driveSedesLinks[sedeNombre] || driveSedesLinks['San Juan'];
+
+                return `
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding:8px;">
+                            <div style="font-weight:700; color:#38bdf8;">${sedeNombre}</div>
+                            <div style="font-size:0.75rem; color:var(--text-muted);">${d.mes || '-'}</div>
+                        </td>
+                        <td style="padding:8px; white-space:nowrap;">${d.fecha}</td>
+                        <td style="padding:8px; font-weight:600;">${d.cliente}</td>
+                        <td style="padding:8px; color:var(--text-muted);">${d.asesor}</td>
+                        <td style="padding:8px;"><span class="${getClassByCategoria(d.categoria)}">${d.categoria}</span></td>
+                        <td style="padding:8px;">
+                            <div style="font-size:0.82rem;">${d.observacion || '-'}</div>
+                            ${d.estado_auditor ? `<div style="font-size:0.75rem; color:#8b5cf6; margin-top:2px;">${d.estado_auditor}</div>` : ''}
+                        </td>
+                        <td style="padding:8px; color:var(--text-muted);">${d.auditor || '-'}</td>
+                        <td style="padding:8px; text-align: center;">
+                            <a href="${driveUrl}" target="_blank" title="Abrir carpeta de PDFs en Google Drive (${sedeNombre})"
+                               style="display: inline-flex; align-items: center; gap: 4px; background: rgba(56, 189, 248, 0.12); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.35); padding: 4px 10px; border-radius: 6px; text-decoration: none; font-size: 0.75rem; font-weight: 700; transition: all 0.2s ease;">
+                                <span class="material-symbols-outlined" style="font-size: 14px;">folder_open</span>
+                                Ver PDF
+                            </a>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        } else {
+            tableWrapper.style.display = 'none';
+        }
+
+        loading.style.display = 'none';
+        activeResponse.style.display = 'flex';
+
+    }, 320);
+}
+
+function renderizarGraficoIA(chartData) {
+    const ctx = document.getElementById('aiChart');
+    if (!ctx) return;
+
+    if (aiChartInstance) {
+        aiChartInstance.destroy();
+    }
+
+    const isLight = document.body.classList.contains('light-theme');
+    const gridColor = isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.06)';
+    const textColor = isLight ? '#475569' : '#94a3b8';
+
+    const chartOptions = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: chartData.type === 'doughnut' || chartData.type === 'pie' ? 'right' : 'top',
+                labels: { color: textColor, boxWidth: 12, font: { family: "'Inter', sans-serif" } }
+            },
+            tooltip: {
+                backgroundColor: isLight ? '#ffffff' : '#1e293b',
+                titleColor: isLight ? '#0f172a' : '#f8fafc',
+                bodyColor: isLight ? '#475569' : '#e2e8f0',
+                borderColor: isLight ? '#cbd5e1' : '#334155',
+                borderWidth: 1,
+                padding: 10
+            }
+        }
+    };
+
+    if (chartData.type === 'bar') {
+        chartOptions.scales = {
+            x: { grid: { color: gridColor }, ticks: { color: textColor } },
+            y: { grid: { color: gridColor }, ticks: { color: textColor, stepSize: 1 }, beginAtZero: true }
+        };
+    }
+
+    aiChartInstance = new Chart(ctx.getContext('2d'), {
+        type: chartData.type || 'bar',
+        data: {
+            labels: chartData.labels,
+            datasets: chartData.datasets
+        },
+        options: chartOptions
+    });
+}
+

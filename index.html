@@ -90,6 +90,13 @@
           style="display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--border-color); color: var(--text-main); padding: 8px;">
           <span class="material-symbols-outlined" id="theme-icon">light_mode</span>
         </button>
+        <!-- Botón Consultas Inteligentes (IA) -->
+        <button id="btn-ai-consultas" class="action-btn btn-ai-pulse" title="Motor de Inteligencia Médica y Consultas en Lenguaje Natural"
+          style="display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(56, 189, 248, 0.25)); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.6); font-weight: 700; box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);">
+          <span class="material-symbols-outlined" style="font-size: 20px; color: #38bdf8;">auto_awesome</span>
+          Consultas Inteligentes
+          <span style="background: #a855f7; color: #fff; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 800; letter-spacing: 0.5px;">AI</span>
+        </button>
         <!-- Botón Estadísticas por Asesor -->
         <button id="btn-asesores" class="action-btn" title="Ver estadísticas por asesor"
           style="display: flex; align-items: center; gap: 5px; background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.5);">
@@ -235,6 +242,206 @@
       <p style="margin: 0; font-size: 0.8rem; opacity: 0.7;">&copy; 2026 GRAVITY CRM. Todos los derechos reservados.</p>
     </div>
   </footer>
+
+  <!-- Modal Consultas Inteligentes (IA Hub) -->
+  <div id="ai-modal"
+    style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(11, 17, 32, 0.85); backdrop-filter: blur(8px); z-index: 210; justify-content: center; align-items: center;">
+    <div
+      style="background: var(--panel-bg); color: var(--text-main); width: 95%; max-width: 1200px; border-radius: 16px; border: 1px solid rgba(192, 132, 252, 0.4); display: flex; flex-direction: column; max-height: 90vh; padding: 2rem; gap: 1.2rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 30px rgba(168, 85, 247, 0.15);">
+
+      <!-- Header IA -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding-bottom: 1rem;">
+        <div style="display: flex; align-items: center; gap: 14px;">
+          <div style="background: linear-gradient(135deg, #8b5cf6, #38bdf8); width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);">
+            <span class="material-symbols-outlined" style="color: #ffffff; font-size: 26px;">psychology</span>
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <h2 style="font-size: 1.5rem; font-weight: 800; margin: 0; background: linear-gradient(135deg, #f8fafc, #c084fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                Plataforma de Inteligencia Médica
+              </h2>
+              <span style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 20px; display: flex; align-items: center; gap: 4px;">
+                <span style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; display: inline-block;"></span>
+                Base de Conocimiento Activa
+              </span>
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.85rem; margin: 3px 0 0 0;">
+              Consultas en lenguaje natural, normalización clínica ontológica (HTA, DBT, etc.) y analítica para toma de decisiones.
+            </p>
+          </div>
+        </div>
+        <button id="close-ai"
+          style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; padding: 6px; border-radius: 8px; transition: all 0.2s ease;">
+          <span class="material-symbols-outlined" style="font-size: 24px;">close</span>
+        </button>
+      </div>
+
+      <!-- Barra de Filtro de Sede para IA -->
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; padding: 10px 14px; background: rgba(0,0,0,0.25); border-radius: 12px; border: 1px solid var(--border-color); align-items: center;">
+        <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 700; display: flex; align-items: center; gap: 5px; text-transform: uppercase; letter-spacing: 0.5px;">
+          <span class="material-symbols-outlined" style="font-size:16px; color:#c084fc;">domain</span> Alcance:
+        </span>
+        <button class="ai-sede-btn active" data-sede="GLOBAL" style="background: rgba(168, 85, 247, 0.25); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.6); padding: 5px 14px; border-radius: 8px; font-weight: 800; cursor: pointer; font-size: 0.85rem;">
+          🌐 Todas las Sedes (Global)
+        </button>
+        <button class="ai-sede-btn" data-sede="San Juan" style="background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); padding: 5px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem;">
+          📍 San Juan
+        </button>
+        <button class="ai-sede-btn" data-sede="Salta" style="background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); padding: 5px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem;">
+          📍 Salta
+        </button>
+        <button class="ai-sede-btn" data-sede="Protección Emerald" style="background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); padding: 5px 14px; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.85rem;">
+          📍 Protección Emerald
+        </button>
+        <div style="margin-left: auto; font-size: 0.75rem; color: #a78bfa; display: flex; align-items: center; gap: 5px;">
+          <span class="material-symbols-outlined" style="font-size: 14px;">folder_shared</span>
+          Drive: 3 Sedes conectadas
+        </div>
+      </div>
+
+      <!-- Buscador en Lenguaje Natural -->
+      <div style="display: flex; gap: 10px; align-items: center;">
+        <div style="position: relative; flex: 1;">
+          <span class="material-symbols-outlined"
+            style="position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #c084fc; font-size: 22px; pointer-events:none;">auto_awesome</span>
+          <input type="text" id="ai-query-input"
+            placeholder="Preguntá lo que necesites (ej: '¿Cuántos casos de hipertensión hubo este año?' o '¿Por qué fue rechazado Juan Pérez?')"
+            style="width: 100%; padding: 14px 16px 14px 50px; border-radius: 12px; border: 1px solid rgba(192, 132, 252, 0.4); background: rgba(15, 23, 42, 0.8); color: var(--text-main); font-size: 0.95rem; outline: none; font-family: inherit; box-shadow: 0 4px 15px rgba(0,0,0,0.2);" />
+        </div>
+        <button id="btn-ai-submit"
+          style="background: linear-gradient(135deg, #8b5cf6, #38bdf8); color: #fff; border: none; padding: 14px 24px; border-radius: 12px; font-weight: 700; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; gap: 8px; box-shadow: 0 4px 15px rgba(139, 92, 246, 0.35); transition: transform 0.15s ease;">
+          <span class="material-symbols-outlined" style="font-size: 20px;">send</span>
+          Consultar
+        </button>
+      </div>
+
+      <!-- Sugerencias y Consultas Ejecutivas Rápidas -->
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+        <span style="font-size: 0.75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">
+          Sugerencias rápidas:
+        </span>
+        <button class="ai-chip-btn" data-query="¿Cuáles son las patologías más frecuentes y su ranking?">
+          📊 Ranking de Patologías
+        </button>
+        <button class="ai-chip-btn" data-query="¿Cuáles son las principales causas de rechazo este año?">
+          ❌ Principales Causas de Rechazo
+        </button>
+        <button class="ai-chip-btn" data-query="Comparativa gerencial de efectividad y volumen entre San Juan, Salta y Emerald">
+          📈 Comparativa de Sedes
+        </button>
+        <button class="ai-chip-btn" data-query="¿Cuántos casos de Hipertensión (HTA) hubo y cómo terminaron?">
+          🩺 Casos de Hipertensión (HTA)
+        </button>
+        <button class="ai-chip-btn" data-query="¿Cuántos casos de Diabetes (DBT) se auditaron y cuál fue su resultado?">
+          🍬 Casos de Diabetes (DBT)
+        </button>
+        <button class="ai-chip-btn" data-query="¿Qué patologías tienen mayor porcentaje de rechazo?">
+          ⚠️ Patologías con Mayor Rechazo
+        </button>
+      </div>
+
+      <!-- Área de Resultados Dinámicos (Scrollable) -->
+      <div id="ai-results-container" style="overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 16px; padding-right: 4px;">
+        
+        <!-- Estado Inicial / Placeholder -->
+        <div id="ai-placeholder" style="text-align: center; padding: 3rem 1.5rem; background: rgba(0,0,0,0.15); border-radius: 12px; border: 1px dashed var(--border-color);">
+          <span class="material-symbols-outlined" style="font-size: 48px; color: #c084fc; margin-bottom: 12px;">insights</span>
+          <h3 style="margin: 0 0 6px 0; font-size: 1.2rem; color: var(--text-main);">Motor de Inteligencia Listo</h3>
+          <p style="margin: 0 auto; max-width: 600px; color: var(--text-muted); font-size: 0.9rem;">
+            Escribí una consulta en lenguaje natural arriba o seleccioná uno de los accesos directos gerenciales para analizar automáticamente toda la base histórica y los expedientes clínicos.
+          </p>
+        </div>
+
+        <!-- Spinner de Procesamiento -->
+        <div id="ai-loading" style="display: none; text-align: center; padding: 2.5rem; background: rgba(0,0,0,0.2); border-radius: 12px;">
+          <div class="spinner" style="width: 32px; height: 32px; margin: 0 auto 12px auto; border-color: rgba(192, 132, 252, 0.2); border-top-color: #c084fc;"></div>
+          <div style="font-weight: 700; color: #c084fc; font-size: 1rem;">Analizando base de conocimiento y normalizando términos...</div>
+          <div style="color: var(--text-muted); font-size: 0.8rem; margin-top: 4px;">Extrayendo correlaciones clínicas y generando estadísticas en tiempo real</div>
+        </div>
+
+        <!-- Contenedor de Respuesta Activa (Oculto al inicio) -->
+        <div id="ai-active-response" style="display: none; flex-direction: column; gap: 16px;">
+          
+          <!-- Tarjeta de Síntesis Ejecutiva -->
+          <div style="background: rgba(15, 23, 42, 0.65); border-radius: 12px; border: 1px solid rgba(192, 132, 252, 0.3); padding: 1.2rem; display: flex; flex-direction: column; gap: 10px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span class="material-symbols-outlined" style="color: #38bdf8; font-size: 20px;">analytics</span>
+                <span style="font-weight: 800; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.5px; color: #38bdf8;" id="ai-response-title">
+                  Diagnóstico y Respuesta Ejecutiva
+                </span>
+              </div>
+              <span id="ai-query-time" style="font-size: 0.75rem; color: var(--text-muted); background: rgba(255,255,255,0.05); padding: 2px 8px; border-radius: 12px;">
+                Respuesta en 0.8s
+              </span>
+            </div>
+            
+            <div id="ai-response-text" style="font-size: 0.95rem; line-height: 1.6; color: var(--text-main);">
+              <!-- Respuesta generada por IA -->
+            </div>
+
+            <!-- Métricas Clave de la Consulta -->
+            <div id="ai-metrics-summary" style="display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.08);">
+              <!-- Métricas rápidas -->
+            </div>
+          </div>
+
+          <!-- Gráfico Dinámico (Si la consulta genera analítica) -->
+          <div id="ai-chart-wrapper" style="background: rgba(15, 23, 42, 0.65); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.2rem; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #a78bfa;" id="ai-chart-title">Distribución Analítica</h4>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Generado automáticamente por el motor de IA</span>
+            </div>
+            <div style="position: relative; height: 260px; width: 100%;">
+              <canvas id="aiChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Tabla de Expedientes / Casos Específicos Encontrados -->
+          <div id="ai-table-wrapper" style="background: rgba(15, 23, 42, 0.65); border-radius: 12px; border: 1px solid var(--border-color); padding: 1.2rem; display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+              <h4 style="margin: 0; font-size: 0.95rem; font-weight: 700; color: #38bdf8;">
+                📋 Expedientes y Fichas Médicas Asociadas (<span id="ai-table-count">0</span>)
+              </h4>
+            </div>
+            <div style="overflow-x: auto; max-height: 280px;">
+              <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;" id="ai-evidence-table">
+                <thead>
+                  <tr style="border-bottom: 1px solid var(--border-color); text-align: left;">
+                    <th style="padding: 8px; color: var(--text-muted);">Sede / Mes</th>
+                    <th style="padding: 8px; color: var(--text-muted);">Fecha</th>
+                    <th style="padding: 8px; color: var(--text-muted);">Cliente / DNI</th>
+                    <th style="padding: 8px; color: var(--text-muted);">Asesor</th>
+                    <th style="padding: 8px; color: var(--text-muted);">Estado</th>
+                    <th style="padding: 8px; color: var(--text-muted);">Patología / Observación Médica</th>
+                    <th style="padding: 8px; color: var(--text-muted);">Auditor</th>
+                    <th style="padding: 8px; color: #38bdf8; text-align: center;">Expediente Drive</th>
+                  </tr>
+                </thead>
+                <tbody id="ai-evidence-body">
+                  <!-- Filas JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- Footer Modal IA -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-color); padding-top: 12px; font-size: 0.8rem; color: var(--text-muted);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="material-symbols-outlined" style="font-size: 16px; color: #10b981;">verified_user</span>
+          Normalización clínica inteligente: HTA = Hipertensión, DBT = Diabetes, DLP = Dislipidemia, etc.
+        </div>
+        <div>
+          GRAVITY Intelligence Core v2.0
+        </div>
+      </div>
+
+    </div>
+  </div>
 
   <!-- Modal Estadísticas por Asesor -->
   <div id="asesores-modal"
