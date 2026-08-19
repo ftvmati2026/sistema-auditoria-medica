@@ -7,7 +7,7 @@
   <title>Sistema de Gestión Gravity</title>
 
   <!-- Estilos -->
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=2.5">
 
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -91,8 +91,8 @@
           <span class="material-symbols-outlined" id="theme-icon">light_mode</span>
         </button>
         <!-- Botón Consultas Inteligentes (IA) -->
-        <button id="btn-ai-consultas" class="action-btn btn-ai-pulse" title="Motor de Inteligencia Médica y Consultas en Lenguaje Natural"
-          style="display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(56, 189, 248, 0.25)); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.6); font-weight: 700; box-shadow: 0 0 15px rgba(168, 85, 247, 0.2);">
+        <button id="btn-ai-consultas" onclick="abrirModalAI()" class="action-btn btn-ai-pulse" title="Motor de Inteligencia Médica y Consultas en Lenguaje Natural"
+          style="display: flex; align-items: center; gap: 6px; background: linear-gradient(135deg, rgba(168, 85, 247, 0.25), rgba(56, 189, 248, 0.25)); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.6); font-weight: 700; box-shadow: 0 0 15px rgba(168, 85, 247, 0.2); cursor: pointer;">
           <span class="material-symbols-outlined" style="font-size: 20px; color: #38bdf8;">auto_awesome</span>
           Consultas Inteligentes
           <span style="background: #a855f7; color: #fff; font-size: 0.65rem; padding: 2px 6px; border-radius: 10px; font-weight: 800; letter-spacing: 0.5px;">AI</span>
@@ -270,7 +270,7 @@
             </p>
           </div>
         </div>
-        <button id="close-ai"
+        <button id="close-ai" onclick="document.getElementById('ai-modal').style.display='none'"
           style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: flex; padding: 6px; border-radius: 8px; transition: all 0.2s ease;">
           <span class="material-symbols-outlined" style="font-size: 24px;">close</span>
         </button>
@@ -576,7 +576,7 @@
     <h3 style="margin-top: 15px;">Sincronizando con Google Sheets...</h3>
   </div>
 
-  <script src="app.js"></script>
+  <script src="app.js?v=2.5"></script>
 </body>
 
 </html>

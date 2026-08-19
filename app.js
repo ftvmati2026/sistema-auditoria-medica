@@ -2079,3 +2079,8 @@ function renderizarGraficoIA(chartData) {
     });
 }
 
+// Exponer funciones al scope global para evitar cualquier problema de eventos
+window.abrirModalAI = abrirModalAI;
+window.ejecutarConsultaIA = ejecutarConsultaIA;
+
+
