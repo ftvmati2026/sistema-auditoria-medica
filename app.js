@@ -27,6 +27,59 @@ let totalDesreguladas = 0; // Total de desreguladas del mes seleccionado (suma c
 let globalData = [];
 let isLoadingGlobalData = false;
 
+// =====================================================================
+// GRAVITY DRIVE PDF INDEXER - Conexión con Google Apps Script
+// =====================================================================
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzAW55N7-h0gwZeOpyiJ7tCpjK70vhGRPe4mOecKmWWKATCKckugHxp3QLZhO4T68O4jQ/exec';
+let basePDFs = [];        // Cache de PDFs indexados por el Apps Script
+let basePDFsCargada = false;
+
+/**
+ * Carga la base de PDFs indexados por el Apps Script (se llama una vez al inicio)
+ */
+function cargarBasePDFs() {
+    return new Promise((resolve) => {
+        if (basePDFsCargada) { resolve(); return; }
+        const callbackName = 'gravity_pdf_cb_' + Date.now();
+        const script = document.createElement('script');
+        script.src = APPS_SCRIPT_URL + '?callback=' + callbackName;
+        script.onerror = () => { console.warn('Gravity PDF: No se pudo cargar la base de PDFs.'); resolve(); };
+        window[callbackName] = function(data) {
+            if (Array.isArray(data)) {
+                basePDFs = data;
+                basePDFsCargada = true;
+                console.log(`✅ Gravity PDF: ${data.length} expedientes cargados desde Drive.`);
+            }
+            document.body.removeChild(script);
+            delete window[callbackName];
+            resolve();
+        };
+        document.body.appendChild(script);
+        // Timeout de seguridad (8 segundos)
+        setTimeout(() => { basePDFsCargada = true; resolve(); }, 8000);
+    });
+}
+
+/**
+ * Busca un afiliado en la base de PDFs del Apps Script
+ */
+function buscarEnBasePDFs(tokens) {
+    if (!basePDFs || basePDFs.length === 0) return null;
+    // Buscar por todos los tokens
+    let resultado = basePDFs.filter(pdf => {
+        const nombre = (pdf.nombre || pdf.nombreArchivo || '').toLowerCase();
+        return tokens.every(tok => nombre.includes(tok));
+    });
+    if (resultado.length === 0 && tokens.length >= 2) {
+        // Buscar por al menos 2 tokens si no hay coincidencia exacta
+        resultado = basePDFs.filter(pdf => {
+            const nombre = (pdf.nombre || pdf.nombreArchivo || '').toLowerCase();
+            return tokens.filter(tok => nombre.includes(tok)).length >= 2;
+        });
+    }
+    return resultado.length > 0 ? resultado : null;
+}
+
 const sedesGlobales = [
     { id: '16wx9YDPOdGelHMtbwyOFatilAOHWrpgzVjr8Xn6fU9o', nombre: 'San Juan' },
     { id: '17FhJMhhK-lkW3_K6oDuUr_K3LDJz71oYg6R99_uGKF4', nombre: 'Salta' },
@@ -205,6 +258,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Arranque Inicial
     actualizarTodo();
+
+    // Cargar base de PDFs del Drive en segundo plano (Apps Script Indexer)
+    cargarBasePDFs();
 });
 
 function actualizarReloj() {
@@ -1736,95 +1792,88 @@ function ejecutarConsultaIA(promptRaw) {
 
         // CASO 1: Consulta de Afiliado Específico / Ficha en Drive
         if (tokensNombre.length > 0 && !esRankingPatologias && !esComparativaSedes) {
-            // Buscar coincidencias en el dataPool completo
-            let poolBusqueda = globalData.length > 0 ? globalData : allData;
-            let casos = poolBusqueda.filter(d => {
-                const nombreCli = d.cliente.toLowerCase();
-                // Coincidencia con todos los tokens o con el string completo
-                return tokensNombre.every(tok => nombreCli.includes(tok));
-            });
 
-            // Si no hay con todos los tokens, buscar con al menos 2 tokens
-            if (casos.length === 0 && tokensNombre.length >= 2) {
-                casos = poolBusqueda.filter(d => {
-                    const nombreCli = d.cliente.toLowerCase();
-                    const matchesCount = tokensNombre.filter(tok => nombreCli.includes(tok)).length;
-                    return matchesCount >= 2;
-                });
-            }
+            // ─── PASO 1: Buscar en la base de PDFs REAL del Apps Script ─────────
+            const resultadosPDF = buscarEnBasePDFs(tokensNombre);
 
-            if (casos.length > 0) {
-                const primerCaso = casos[0];
-                const sedeCaso = primerCaso.sedeNombre || 'San Juan';
-                const mesCaso = primerCaso.mes || 'JULIO';
-                const driveUrl = driveSedesLinks[sedeCaso] || driveSedesLinks['San Juan'];
-                const estadoCarpetaDrive = primerCaso.categoria.includes('RECHAZADA') 
-                    ? `RECHAZADAS ${mesCaso}` 
-                    : (primerCaso.categoria.includes('ACEPTADA') ? `ACEPTADAS ${mesCaso}` : `AUDITORÍAS ${mesCaso}`);
+            if (resultadosPDF && resultadosPDF.length > 0) {
+                // ✅ ENCONTRADO EN LA BASE DE PDFs REAL
+                const primerPDF = resultadosPDF[0];
+                resultado.titulo = `📄 Expediente Real del PDF: ${primerPDF.nombre || primerPDF.nombreArchivo}`;
 
-                resultado.titulo = `Expediente Clínico en Drive: ${primerCaso.cliente}`;
-                
-                let textoCasos = casos.map(c => {
-                    const obsTexto = c.observacion || c.estado_auditor || 'Sin observaciones adicionales';
-                    const patologias = normalizarEntidadesMedicas(obsTexto + ' ' + (c.estado_auditor || ''));
-                    const patStr = patologias.length > 0 
+                let textoCasosPDF = resultadosPDF.map(pdf => {
+                    const obsTexto = pdf.observaciones || 'Sin observaciones registradas en el PDF.';
+                    const patologias = normalizarEntidadesMedicas(obsTexto);
+                    const patStr = patologias.length > 0
                         ? patologias.map(p => `<span style="background:rgba(255,255,255,0.06); border:1px solid ${p.color}; color:${p.color}; padding:3px 10px; border-radius:20px; font-size:0.8rem; font-weight:700; display:inline-flex; align-items:center; gap:4px;">● ${p.nombre}</span>`).join(' ')
-                        : `<span style="color:var(--text-muted); font-size:0.85rem;">No se registraron patologías no asegurables adicionales.</span>`;
-                    
-                    const rutaDriveEstimada = `Google Drive > ${sedeCaso} > 2026 > ${mesCaso} > ${estadoCarpetaDrive} > ${c.cliente}.pdf`;
+                        : `<span style="color:var(--text-muted); font-size:0.85rem;">No se detectaron patologías adicionales normalizadas.</span>`;
+
+                    const colorEstado = pdf.estado === 'RECHAZADA' ? '#f43f5e' : (pdf.estado === 'ACEPTADA' ? '#10b981' : '#f59e0b');
+                    const rutaDrive = `Google Drive > ${pdf.sede} > 2026 > ${pdf.carpeta}`;
+                    const urlArchivoDirecto = pdf.urlDirecta || driveSedesLinks[pdf.sede] || driveSedesLinks['San Juan'];
 
                     return `
-                        <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(192, 132, 252, 0.4); border-left: 5px solid ${c.categoria.includes('ACEPTADA') ? '#10b981' : (c.categoria.includes('RECHAZADA') ? '#f43f5e' : '#f59e0b')}; padding: 1.2rem; margin: 10px 0; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
+                        <div style="background: rgba(15, 23, 42, 0.9); border: 1px solid rgba(192, 132, 252, 0.4); border-left: 5px solid ${colorEstado}; padding: 1.2rem; margin: 10px 0; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);">
                             
-                            <!-- Header Ficha -->
+                            <!-- Header Ficha PDF -->
                             <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px; margin-bottom:12px;">
                                 <div>
-                                    <h3 style="margin:0; font-size:1.2rem; color:#f8fafc; font-weight:800; letter-spacing:0.5px;">${c.cliente}</h3>
-                                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
-                                        Sede: <strong style="color:#38bdf8;">${sedeCaso}</strong> · Mes: <strong>${c.mes}</strong> · Fecha de Auditoría: <strong>${c.fecha}</strong> · Asesor: <strong>${c.asesor}</strong>
+                                    <h3 style="margin:0; font-size:1.2rem; color:#f8fafc; font-weight:800; letter-spacing:0.5px;">
+                                        <span class="material-symbols-outlined" style="font-size:18px; vertical-align:middle; color:#a78bfa;">picture_as_pdf</span>
+                                        ${pdf.nombre || pdf.nombreArchivo}
+                                    </h3>
+                                    <div style="font-size:0.8rem; color:var(--text-muted); margin-top:4px;">
+                                        Sede: <strong style="color:#38bdf8;">${pdf.sede}</strong> · 
+                                        Carpeta: <strong>${pdf.carpeta}</strong>
+                                        ${pdf.dni ? ` · DNI: <strong>${pdf.dni}</strong>` : ''}
                                     </div>
                                 </div>
                                 <div style="display:flex; align-items:center; gap:10px;">
-                                    <span class="${getClassByCategoria(c.categoria)}" style="font-size:0.9rem; padding:5px 14px; font-weight:800;">${c.categoria}</span>
-                                    <a href="${driveUrl}" target="_blank" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.2)); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.5); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 5px;">
-                                        <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span>
-                                        Abrir en Drive
+                                    <span style="background:${colorEstado}22; color:${colorEstado}; border:1px solid ${colorEstado}55; padding:5px 14px; border-radius:20px; font-size:0.9rem; font-weight:800;">
+                                        ${pdf.estado}
+                                    </span>
+                                    <a href="${urlArchivoDirecto}" target="_blank" 
+                                       style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.25), rgba(56, 189, 248, 0.2)); 
+                                              color: #a78bfa; border: 1px solid rgba(167, 139, 250, 0.5); 
+                                              padding: 6px 14px; border-radius: 8px; font-size: 0.82rem; 
+                                              font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 5px;">
+                                        <span class="material-symbols-outlined" style="font-size: 16px;">picture_as_pdf</span>
+                                        Abrir PDF
                                     </a>
                                 </div>
                             </div>
 
-                            <!-- Ruta Drive -->
-                            <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px; margin-bottom: 12px; font-size: 0.78rem; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
+                            <!-- Ruta Drive Real -->
+                            <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(167, 139, 250, 0.2); border-radius: 8px; padding: 6px 12px; margin-bottom: 12px; font-size: 0.78rem; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
                                 <span class="material-symbols-outlined" style="font-size: 16px;">snippet_folder</span>
-                                <span><strong>Ubicación en Drive:</strong> ${rutaDriveEstimada}</span>
+                                <span><strong>📁 Ruta Real en Drive:</strong> ${rutaDrive}</span>
                             </div>
 
-                            <!-- Observaciones Generales del PDF -->
-                            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
-                                <div style="font-size:0.8rem; font-weight:700; text-transform:uppercase; color:#38bdf8; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                            <!-- Fuente: PDF REAL -->
+                            <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16,185,129,0.25); border-radius:6px; padding:5px 10px; margin-bottom:12px; font-size:0.75rem; color:#6ee7b7; display:flex; align-items:center; gap:5px;">
+                                <span class="material-symbols-outlined" style="font-size:14px;">verified</span>
+                                <strong>Fuente: Texto extraído directamente del PDF médico mediante OCR (Google Drive)</strong>
+                            </div>
+
+                            <!-- Observaciones REALES del PDF -->
+                            <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; margin-bottom: 12px;">
+                                <div style="font-size:0.8rem; font-weight:700; text-transform:uppercase; color:#38bdf8; margin-bottom:8px; display:flex; align-items:center; gap:5px;">
                                     <span class="material-symbols-outlined" style="font-size:16px;">clinical_notes</span>
-                                    Observaciones Generales de la Declaración de Salud:
+                                    Observaciones Generales de la Declaración de Salud (texto real del PDF):
                                 </div>
-                                <div style="font-size:0.95rem; line-height:1.6; color:#f8fafc; font-style:italic;">
+                                <div style="font-size:0.97rem; line-height:1.7; color:#f8fafc; font-style:italic; border-left:3px solid #38bdf8; padding-left:12px;">
                                     "${obsTexto}"
                                 </div>
-                                ${c.estado_auditor ? `<div style="margin-top:8px; font-size:0.85rem; color:#c084fc;"><strong>Dictamen del Auditor:</strong> ${c.estado_auditor}</div>` : ''}
                             </div>
 
-                            <!-- Patologías Detectadas por IA -->
+                            <!-- Diagnósticos normalizados por IA -->
                             <div>
                                 <div style="font-size:0.78rem; font-weight:700; text-transform:uppercase; color:var(--text-muted); margin-bottom:6px;">
-                                    Diagnósticos & Antecedentes Clínicos Normalizados:
+                                    Diagnósticos & Antecedentes Clínicos Normalizados por IA:
                                 </div>
                                 <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                     ${patStr}
                                 </div>
-                            </div>
-
-                            <!-- Auditor -->
-                            <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between; align-items:center;">
-                                <span>👨‍⚕️ Auditor Responsable: <strong style="color:#f8fafc;">${c.auditor || 'Matías Gómez'}</strong></span>
-                                <span>Sello: <strong>Red de Servicios Avera · Auditoría de Afiliaciones</strong></span>
                             </div>
 
                         </div>
@@ -1832,28 +1881,126 @@ function ejecutarConsultaIA(promptRaw) {
                 }).join('');
 
                 resultado.textoHtml = `
-                    <p style="margin-top:0;">Se localizó la ficha médica correspondiente en la base de <strong>${sedeCaso}</strong>:</p>
-                    ${textoCasos}
-                `;
-                resultado.evidencias = casos;
-                resultado.metricas = [
-                    { val: primerCaso.cliente.split(' ')[0], lbl: 'Afiliado Identificado', col: '#c084fc' },
-                    { val: primerCaso.categoria, lbl: 'Estado Dictaminado', col: primerCaso.categoria.includes('ACEPTADA') ? '#10b981' : '#f43f5e' },
-                    { val: sedeCaso, lbl: 'Sede en Drive', col: '#38bdf8' }
-                ];
-            } else {
-                resultado.titulo = `Búsqueda de Ficha: "${nombreLimpio.toUpperCase()}"`;
-                resultado.textoHtml = `
-                    <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 10px; padding: 14px; color: #fecdd3;">
-                        <div style="font-weight: 700; font-size: 1rem; margin-bottom: 4px; display:flex; align-items:center; gap:6px;">
-                            <span class="material-symbols-outlined">search_off</span>
-                            No se encontró la ficha con el nombre "${nombreLimpio.toUpperCase()}"
-                        </div>
-                        <p style="margin: 0; font-size: 0.88rem; line-height: 1.5;">
-                            Se buscó en las carpetas y registros de <strong>San Juan, Salta y Protección Emerald</strong>. Verifique si el apellido o nombre contiene errores de tipeo o pruebe buscando únicamente por el apellido (ej: <em>Ochoa</em>).
-                        </p>
+                    <div style="background:rgba(16,185,129,0.07); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:8px 14px; margin-bottom:12px; font-size:0.85rem; color:#6ee7b7; display:flex; align-items:center; gap:6px;">
+                        <span class="material-symbols-outlined" style="font-size:18px;">picture_as_pdf</span>
+                        <span>Se encontraron <strong>${resultadosPDF.length}</strong> expediente(s) PDF indexado(s) en Google Drive. Las observaciones son el <strong>texto real extraído del PDF médico</strong>.</span>
                     </div>
+                    ${textoCasosPDF}
                 `;
+                resultado.metricas = [
+                    { val: (primerPDF.nombre || primerPDF.nombreArchivo).split(' ')[0], lbl: 'Afiliado en PDF', col: '#c084fc' },
+                    { val: primerPDF.estado, lbl: 'Estado Dictaminado', col: primerPDF.estado === 'ACEPTADA' ? '#10b981' : '#f43f5e' },
+                    { val: primerPDF.sede, lbl: 'Sede en Drive', col: '#38bdf8' }
+                ];
+                resultado.evidencias = resultadosPDF.map(pdf => ({
+                    sedeNombre: pdf.sede,
+                    mes: pdf.carpeta,
+                    fecha: pdf.fechaModificacion ? pdf.fechaModificacion.split('T')[0] : '-',
+                    cliente: pdf.nombre || pdf.nombreArchivo,
+                    asesor: '-',
+                    categoria: pdf.estado,
+                    observacion: pdf.observaciones,
+                    auditor: '-',
+                    urlDirecta: pdf.urlDirecta
+                }));
+
+            } else {
+                // ─── PASO 2: Fallback → Buscar en Google Sheets (globalData / allData) ──
+                let poolBusqueda = globalData.length > 0 ? globalData : allData;
+                let casos = poolBusqueda.filter(d => {
+                    const nombreCli = d.cliente.toLowerCase();
+                    return tokensNombre.every(tok => nombreCli.includes(tok));
+                });
+
+                if (casos.length === 0 && tokensNombre.length >= 2) {
+                    casos = poolBusqueda.filter(d => {
+                        const nombreCli = d.cliente.toLowerCase();
+                        return tokensNombre.filter(tok => nombreCli.includes(tok)).length >= 2;
+                    });
+                }
+
+                if (casos.length > 0) {
+                    const primerCaso = casos[0];
+                    const sedeCaso = primerCaso.sedeNombre || 'San Juan';
+                    const mesCaso = primerCaso.mes || 'JULIO';
+                    const driveUrl = driveSedesLinks[sedeCaso] || driveSedesLinks['San Juan'];
+                    const estadoCarpetaDrive = primerCaso.categoria.includes('RECHAZADA')
+                        ? `RECHAZADAS ${mesCaso}`
+                        : (primerCaso.categoria.includes('ACEPTADA') ? `ACEPTADAS ${mesCaso}` : `AUDITORÍAS ${mesCaso}`);
+
+                    resultado.titulo = `Expediente Clínico (Planilla): ${primerCaso.cliente}`;
+
+                    let textoCasos = casos.map(c => {
+                        const obsTexto = c.observacion || c.estado_auditor || 'Sin observaciones adicionales';
+                        const patologias = normalizarEntidadesMedicas(obsTexto + ' ' + (c.estado_auditor || ''));
+                        const patStr = patologias.length > 0
+                            ? patologias.map(p => `<span style="background:rgba(255,255,255,0.06); border:1px solid ${p.color}; color:${p.color}; padding:3px 10px; border-radius:20px; font-size:0.8rem; font-weight:700; display:inline-flex; align-items:center; gap:4px;">● ${p.nombre}</span>`).join(' ')
+                            : `<span style="color:var(--text-muted); font-size:0.85rem;">No se registraron patologías adicionales.</span>`;
+                        const rutaDriveEstimada = `Google Drive > ${sedeCaso} > 2026 > ${mesCaso} > ${estadoCarpetaDrive} > ${c.cliente}.pdf`;
+
+                        return `
+                            <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(192, 132, 252, 0.4); border-left: 5px solid ${c.categoria.includes('ACEPTADA') ? '#10b981' : (c.categoria.includes('RECHAZADA') ? '#f43f5e' : '#f59e0b')}; padding: 1.2rem; margin: 10px 0; border-radius: 12px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; border-bottom:1px solid rgba(255,255,255,0.08); padding-bottom:10px; margin-bottom:12px;">
+                                    <div>
+                                        <h3 style="margin:0; font-size:1.2rem; color:#f8fafc; font-weight:800;">${c.cliente}</h3>
+                                        <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
+                                            Sede: <strong style="color:#38bdf8;">${sedeCaso}</strong> · Mes: <strong>${c.mes}</strong> · Fecha: <strong>${c.fecha}</strong> · Asesor: <strong>${c.asesor}</strong>
+                                        </div>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:10px;">
+                                        <span class="${getClassByCategoria(c.categoria)}" style="font-size:0.9rem; padding:5px 14px; font-weight:800;">${c.categoria}</span>
+                                        <a href="${driveUrl}" target="_blank" style="background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(168, 85, 247, 0.2)); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.5); padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; text-decoration: none; display: flex; align-items: center; gap: 5px;">
+                                            <span class="material-symbols-outlined" style="font-size: 16px;">folder_open</span> Ver en Drive
+                                        </a>
+                                    </div>
+                                </div>
+                                <div style="background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 8px; padding: 6px 12px; margin-bottom: 12px; font-size: 0.78rem; color: #a78bfa; display: flex; align-items: center; gap: 6px;">
+                                    <span class="material-symbols-outlined" style="font-size: 16px;">snippet_folder</span>
+                                    <span><strong>Ruta estimada en Drive:</strong> ${rutaDriveEstimada}</span>
+                                </div>
+                                <div style="background:rgba(245,158,11,0.07); border:1px solid rgba(245,158,11,0.2); border-radius:6px; padding:5px 10px; margin-bottom:10px; font-size:0.75rem; color:#fcd34d; display:flex; align-items:center; gap:5px;">
+                                    <span class="material-symbols-outlined" style="font-size:14px;">info</span>
+                                    <span>Fuente: Planilla Google Sheets (el PDF completo aún no fue indexado por el Apps Script).</span>
+                                </div>
+                                <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px;">
+                                    <div style="font-size:0.8rem; font-weight:700; text-transform:uppercase; color:#38bdf8; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                                        <span class="material-symbols-outlined" style="font-size:16px;">clinical_notes</span>
+                                        Observaciones (desde la planilla):
+                                    </div>
+                                    <div style="font-size:0.95rem; line-height:1.6; color:#f8fafc; font-style:italic;">"${obsTexto}"</div>
+                                    ${c.estado_auditor ? `<div style="margin-top:8px; font-size:0.85rem; color:#c084fc;"><strong>Dictamen:</strong> ${c.estado_auditor}</div>` : ''}
+                                </div>
+                                <div style="display:flex; gap:8px; flex-wrap:wrap;">${patStr}</div>
+                                <div style="margin-top:12px; padding-top:10px; border-top:1px solid rgba(255,255,255,0.06); font-size:0.8rem; color:var(--text-muted); display:flex; justify-content:space-between;">
+                                    <span>👨‍⚕️ Auditor: <strong style="color:#f8fafc;">${c.auditor || 'Matías Gómez'}</strong></span>
+                                    <span>Sello: <strong>Red de Servicios Avera · Auditoría de Afiliaciones</strong></span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    resultado.textoHtml = `<p style="margin-top:0;">Se localizó la ficha en la planilla de <strong>${sedeCaso}</strong>:</p>${textoCasos}`;
+                    resultado.evidencias = casos;
+                    resultado.metricas = [
+                        { val: primerCaso.cliente.split(' ')[0], lbl: 'Afiliado Identificado', col: '#c084fc' },
+                        { val: primerCaso.categoria, lbl: 'Estado Dictaminado', col: primerCaso.categoria.includes('ACEPTADA') ? '#10b981' : '#f43f5e' },
+                        { val: sedeCaso, lbl: 'Sede en Drive', col: '#38bdf8' }
+                    ];
+                } else {
+                    resultado.titulo = `Búsqueda de Ficha: "${nombreLimpio.toUpperCase()}"`;
+                    resultado.textoHtml = `
+                        <div style="background: rgba(244, 63, 94, 0.1); border: 1px solid rgba(244, 63, 94, 0.3); border-radius: 10px; padding: 14px; color: #fecdd3;">
+                            <div style="font-weight: 700; font-size: 1rem; margin-bottom: 4px; display:flex; align-items:center; gap:6px;">
+                                <span class="material-symbols-outlined">search_off</span>
+                                No se encontró la ficha con el nombre "${nombreLimpio.toUpperCase()}"
+                            </div>
+                            <p style="margin: 0; font-size: 0.88rem; line-height: 1.5;">
+                                Se buscó en la base de PDFs de Drive y en la planilla de <strong>San Juan, Salta y Protección Emerald</strong>. 
+                                Verifique la ortografía o pruebe con solo el apellido (ej: <em>Ochoa</em>).
+                            </p>
+                        </div>
+                    `;
+                }
             }
         }
         // CASO 2: Ranking de Patologías Más Frecuentes
